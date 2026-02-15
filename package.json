@@ -1,0 +1,25 @@
+{
+  "name": "route-traffic-history-and-prediction",
+  "version": "1.0.0",
+  "description": "Track and predict route travel times based on historical traffic data",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "node backend/server.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "db:init": "node backend/db/init.js",
+    "test:apis": "node scripts/test-apis.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.4",
+    "express": "^4.21.1",
+    "node-cron": "^3.0.3",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

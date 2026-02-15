@@ -1,0 +1,28 @@
+This project is for users who want to predict or see time it takes from destination to destination based on tracking traffic and time data each day and storing it as historic data.
+
+It takes inputs
+- start location and destination location
+- retrieve data start time (defult now), can select future date and time to start
+- data retrieving periods and cycle duration (defult 1 hour cycle time, running 24 hours, 7 days a week)
+- data retrieving end time (defult 1 week, options for days, weeks, months, until requested stop)
+- navigation type (defult: driving, can we walking, transit, etc)
+- route preferences, (defult: fastest route determined by google maps at the time of the data retrieve, options for avoiding highways, tolls, etc, )
+- additional routing (yes or no, and can generate data collection for potential different routes)
+
+when retireving data
+- use google maps api
+- get all possible useful routes based on inputs, maybe a couple is fine
+- get route details (roads and turns to take)
+- get route time, distance
+- get traffic areas, and zones
+- store all this data somewhere
+
+live portal
+- see current status of data retrieving
+- have graphic and data interpretors showing the results of collected data
+
+End results portal section
+- shows all results including but not limited to
+    - the different routes-
+    - the different route time it takes with a timeline showing all retrieved data
+

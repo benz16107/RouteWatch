@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { fetchJson } from '../utils/api.js'
 
 const API = '/api'
 
@@ -8,8 +9,7 @@ export default function JobsList({ onSelectJob }) {
 
   const fetchJobs = async () => {
     try {
-      const res = await fetch(`${API}/jobs`)
-      const data = await res.json()
+      const data = await fetchJson(`${API}/jobs`)
       setJobs(data)
     } catch (e) {
       console.error(e)

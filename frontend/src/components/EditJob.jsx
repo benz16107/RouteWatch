@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import PlaceAutocomplete from './PlaceAutocomplete'
+import { fetchJson } from '../utils/api.js'
 
 const API = '/api'
 
@@ -56,7 +57,7 @@ export default function EditJob({ job, onSaved, onCancel }) {
     setError('')
     setLoading(true)
     try {
-      const res = await fetch(`${API}/jobs/${job.id}`, {
+      const data = await fetchJson(`${API}/jobs/${job.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -65,8 +66,7 @@ export default function EditJob({ job, onSaved, onCancel }) {
           end_time: form.end_time || null,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to update job')
+      if (data?.error) throw new Error(data.error)
       onSaved(data)
     } catch (err) {
       setError(err.message)

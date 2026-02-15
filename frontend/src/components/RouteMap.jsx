@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { fetchJson } from '../utils/api.js'
 
 const API = '/api'
 
@@ -37,8 +38,7 @@ export default function RouteMap({ origin, destination, travelMode = 'driving', 
     if (avoidHighways) params.set('avoid_highways', '1')
     if (avoidTolls) params.set('avoid_tolls', '1')
 
-    fetch(`${API}/route-preview?${params}`)
-      .then(r => r.json())
+    fetchJson(`${API}/route-preview?${params}`)
       .then(data => {
         if (data.error) throw new Error(data.error)
         setRoute(data)

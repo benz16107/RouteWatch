@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import RouteMap from './RouteMap'
 import EditJob from './EditJob'
+import { fetchJson } from '../utils/api.js'
 
 const API = '/api'
 
@@ -23,12 +24,10 @@ export default function JobDetail({ jobId, onBack }) {
 
   const fetchData = async () => {
     try {
-      const [jobRes, snapRes] = await Promise.all([
-        fetch(`${API}/jobs/${jobId}`),
-        fetch(`${API}/jobs/${jobId}/snapshots`),
+      const [jobData, snapData] = await Promise.all([
+        fetchJson(`${API}/jobs/${jobId}`),
+        fetchJson(`${API}/jobs/${jobId}/snapshots`),
       ])
-      const jobData = await jobRes.json()
-      const snapData = await snapRes.json()
       setJob(jobData)
       setSnapshots(snapData)
     } catch (e) {
@@ -48,8 +47,7 @@ export default function JobDetail({ jobId, onBack }) {
   const runAction = async (action) => {
     setActionLoading(action)
     try {
-      const res = await fetch(`${API}/jobs/${jobId}/${action}`, { method: 'POST' })
-      const data = await res.json()
+      const data = await fetchJson(`${API}/jobs/${jobId}/${action}`, { method: 'POST' })
       if (!res.ok) throw new Error(data.error)
       setJob(data)
       fetchData()

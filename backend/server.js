@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { initDatabase, getDb } from './db/init.js';
 import { startJob, stopJob, pauseJob, resumeJob, restoreRunningJobs } from './services/scheduler.js';
-import { getRoutePolyline, getRoutePolylines } from './services/googleMaps.js';
+import { getRoutePolyline } from './services/googleMaps.js';
 import { mkdirSync, existsSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -57,11 +57,11 @@ app.post('/api/jobs', (req, res) => {
       start_time,
       end_time,
       cycle_minutes = 60,
+      cycle_seconds = 0,
       duration_days = 7,
       navigation_type = 'driving',
       avoid_highways = false,
       avoid_tolls = false,
-      additional_routes = 1,
     } = req.body;
 
     if (!start_location || !end_location) {
@@ -71,8 +71,8 @@ app.post('/api/jobs', (req, res) => {
     const id = uuidv4();
     const db = getDb();
     db.prepare(`
-      INSERT INTO collection_jobs (id, start_location, end_location, start_time, end_time, cycle_minutes, duration_days, navigation_type, avoid_highways, avoid_tolls, additional_routes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO collection_jobs (id, start_location, end_location, start_time, end_time, cycle_minutes, cycle_seconds, duration_days, navigation_type, avoid_highways, avoid_tolls, additional_routes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       start_location,
@@ -80,11 +80,12 @@ app.post('/api/jobs', (req, res) => {
       start_time || null,
       end_time || null,
       cycle_minutes,
+      cycle_seconds || 0,
       duration_days,
       navigation_type,
       avoid_highways ? 1 : 0,
       avoid_tolls ? 1 : 0,
-      additional_routes
+      0
     );
 
     const job = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(id);
@@ -102,7 +103,7 @@ app.patch('/api/jobs/:id', (req, res) => {
     if (!job) return res.status(404).json({ error: 'Job not found' });
     if (job.status === 'running') return res.status(400).json({ error: 'Cannot edit running job' });
 
-    const allowed = ['start_location', 'end_location', 'start_time', 'end_time', 'cycle_minutes', 'duration_days', 'navigation_type', 'avoid_highways', 'avoid_tolls', 'additional_routes'];
+    const allowed = ['start_location', 'end_location', 'start_time', 'end_time', 'cycle_minutes', 'cycle_seconds', 'duration_days', 'navigation_type', 'avoid_highways', 'avoid_tolls'];
     const updates = [];
     const values = [];
     for (const k of allowed) {
@@ -186,25 +187,20 @@ app.post('/api/jobs/:id/resume', async (req, res) => {
   }
 });
 
-// API: Get route polyline(s) for map display (uses backend Directions API - no frontend key needed)
+// API: Get route polyline for map display (uses backend Directions API - no frontend key needed)
 app.get('/api/route-preview', async (req, res) => {
   try {
-    const { origin, destination, mode = 'driving', avoid_highways, avoid_tolls, additional_routes } = req.query;
+    const { origin, destination, mode = 'driving', avoid_highways, avoid_tolls } = req.query;
     if (!origin || !destination) {
       return res.status(400).json({ error: 'origin and destination required' });
     }
     const opts = { mode, avoidHighways: !!avoid_highways, avoidTolls: !!avoid_tolls };
-    const additional = parseInt(additional_routes, 10) || 0;
-
-    if (additional > 0) {
-      const routes = await getRoutePolylines(origin, destination, { ...opts, additionalRoutes: additional });
-      if (!routes?.length) return res.status(404).json({ error: 'No routes found' });
-      res.json({ routes });
-    } else {
-      const route = await getRoutePolyline(origin, destination, opts);
-      if (!route) return res.status(404).json({ error: 'Route not found' });
-      res.json(route);
+    const route = await getRoutePolyline(origin, destination, opts);
+    if (!route) {
+      console.warn('[route-preview] No route for:', origin, '→', destination);
+      return res.status(404).json({ error: 'Route not found. Check that start and destination are valid addresses.' });
     }
+    res.json(route);
   } catch (e) {
     handleError(res, e, 'GET /api/route-preview');
   }
@@ -236,10 +232,12 @@ app.get('/api/jobs/:id/export', (req, res) => {
     ).all(req.params.id);
 
     if (format === 'csv') {
-      const header = 'collected_at,route_index,duration_seconds,distance_meters,duration_minutes\n';
-      const rows = snapshots.map(s =>
-        `${s.collected_at},${s.route_index},${s.duration_seconds},${s.distance_meters},${s.duration_seconds ? Math.round(s.duration_seconds / 60) : ''}`
-      ).join('\n');
+      const header = 'collected_at,duration_seconds,distance_meters,duration_minutes\n';
+      const rows = snapshots
+        .filter(s => (s.route_index ?? 0) === 0)
+        .map(s =>
+          `${s.collected_at},${s.duration_seconds},${s.distance_meters},${s.duration_seconds ? Math.round(s.duration_seconds / 60) : ''}`
+        ).join('\n');
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename="job-${req.params.id}.csv"`);
       return res.send(header + rows);

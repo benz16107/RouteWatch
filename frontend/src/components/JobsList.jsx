@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { fetchJson } from '../utils/api.js'
+import { shortenToStreet } from '../utils/formatAddress.js'
 
 const API = '/api'
 
@@ -51,10 +52,10 @@ export default function JobsList({ onSelectJob }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div>
               <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1rem' }}>
-                {job.start_location} → {job.end_location}
+                {shortenToStreet(job.start_location)} → {shortenToStreet(job.end_location)}
               </h3>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                {job.cycle_minutes} min cycle • {job.duration_days} days • {job.navigation_type}
+                {(job.cycle_seconds ?? 0) > 0 ? `${job.cycle_seconds} sec` : `${job.cycle_minutes ?? 60} min`} cycle • {job.duration_days} days • {job.navigation_type}
               </div>
             </div>
             <span className={`status-badge status-${job.status}`}>{job.status}</span>

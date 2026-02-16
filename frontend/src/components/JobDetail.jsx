@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   LineChart,
   Line,
@@ -7,11 +7,12 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts'
 import RouteMap from './RouteMap'
 import EditJob from './EditJob'
+import SnapshotDetail from './SnapshotDetail'
 import { fetchJson } from '../utils/api.js'
+import { shortenToStreet } from '../utils/formatAddress.js'
 
 const API = '/api'
 
@@ -21,6 +22,8 @@ export default function JobDetail({ jobId, onBack }) {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState('')
   const [editing, setEditing] = useState(false)
+  const [expandedSnapshotId, setExpandedSnapshotId] = useState(null)
+  const [countdown, setCountdown] = useState(null)
 
   const fetchData = async () => {
     try {
@@ -44,6 +47,25 @@ export default function JobDetail({ jobId, onBack }) {
     return () => clearInterval(interval)
   }, [jobId, job?.status])
 
+  useEffect(() => {
+    if (job?.status !== 'running' || !snapshots.length) {
+      setCountdown(null)
+      return
+    }
+    const sec = parseInt(job?.cycle_seconds, 10)
+    const intervalSeconds = !Number.isNaN(sec) && sec > 0 ? sec : ((parseInt(job?.cycle_minutes, 10) || 60) * 60)
+    const lastCollected = new Date(snapshots[snapshots.length - 1].collected_at).getTime()
+    const nextAt = lastCollected + intervalSeconds * 1000
+
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((nextAt - Date.now()) / 1000))
+      setCountdown(left)
+    }
+    tick()
+    const t = setInterval(tick, 1000)
+    return () => clearInterval(t)
+  }, [job?.status, job?.cycle_seconds, job?.cycle_minutes, snapshots])
+
   const runAction = async (action) => {
     setActionLoading(action)
     try {
@@ -63,18 +85,14 @@ export default function JobDetail({ jobId, onBack }) {
 
   if (loading || !job) return <div className="card">Loading...</div>
 
-  const groups = snapshots.reduce((acc, s) => {
-    const key = s.collected_at
-    if (!acc[key]) acc[key] = {}
-    acc[key][`route_${s.route_index}`] = s.duration_seconds ? Math.round(s.duration_seconds / 60) : null
-    acc[key].time = s.collected_at
-    acc[key].formatted = new Date(s.collected_at).toLocaleString()
-    return acc
-  }, {})
-  const chartData = Object.values(groups).sort((a, b) => new Date(a.time) - new Date(b.time))
-
-  const routeCount = Math.max(...snapshots.map(s => s.route_index), 0) + 1
-  const colors = ['#58a6ff', '#3fb950', '#d29922']
+  const chartData = snapshots
+    .filter(s => (s.route_index ?? 0) === 0)
+    .map(s => ({
+      time: s.collected_at,
+      formatted: new Date(s.collected_at).toLocaleString(),
+      duration: s.duration_seconds ? Math.round(s.duration_seconds / 60) : null,
+    }))
+    .sort((a, b) => new Date(a.time) - new Date(b.time))
 
   return (
     <div>
@@ -86,10 +104,10 @@ export default function JobDetail({ jobId, onBack }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <h2 style={{ margin: '0 0 0.5rem 0' }}>
-              {job.start_location} → {job.end_location}
+              {shortenToStreet(job.start_location)} → {shortenToStreet(job.end_location)}
             </h2>
             <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              Cycle: {job.cycle_minutes} min • Duration: {job.duration_days} days • {job.navigation_type}
+              Cycle: {(job.cycle_seconds ?? 0) > 0 ? `${job.cycle_seconds} sec` : `${job.cycle_minutes ?? 60} min`} • Duration: {job.duration_days} days • {job.navigation_type}
               {job.avoid_highways && ' • Avoid highways'}
               {job.avoid_tolls && ' • Avoid tolls'}
             </div>
@@ -98,13 +116,15 @@ export default function JobDetail({ jobId, onBack }) {
             </span>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {job.status === 'pending' && (
+            {(job.status === 'pending' || job.status === 'completed') && (
               <button
                 className="btn btn-success"
                 onClick={() => runAction('start')}
                 disabled={actionLoading}
               >
-                {actionLoading === 'start' ? 'Starting...' : 'Start'}
+                {actionLoading === 'start'
+                  ? (job.status === 'completed' ? 'Continuing...' : 'Starting...')
+                  : (job.status === 'completed' ? 'Continue' : 'Start')}
               </button>
             )}
             {job.status === 'running' && (
@@ -182,7 +202,7 @@ export default function JobDetail({ jobId, onBack }) {
           travelMode={job.navigation_type}
           avoidHighways={!!job.avoid_highways}
           avoidTolls={!!job.avoid_tolls}
-          additionalRoutes={job.additional_routes ?? 0}
+          lastSnapshotAt={snapshots.length ? snapshots[snapshots.length - 1].collected_at : null}
         />
       </div>
 
@@ -200,18 +220,20 @@ export default function JobDetail({ jobId, onBack }) {
           </div>
         ) : (
           <>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Collected at {new Date(snapshots[snapshots.length - 1].collected_at).toLocaleString()}
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
+              <span>Collected at {new Date(snapshots[snapshots.length - 1].collected_at).toLocaleString()}</span>
+              {job.status === 'running' && countdown != null && (
+                <span style={{ fontWeight: 600, color: 'var(--accent)' }}>
+                  Next cycle in {countdown}s
+                </span>
+              )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
-              {snapshots
-                .filter(s => s.collected_at === snapshots[snapshots.length - 1].collected_at)
-                .sort((a, b) => a.route_index - b.route_index)
-                .map(s => (
+              {(() => {
+                const latest = snapshots.filter(s => s.collected_at === snapshots[snapshots.length - 1].collected_at)
+                const s = latest.find(x => (x.route_index ?? 0) === 0) || latest[0]
+                return (
                   <div key={s.id} className="current-cycle-route">
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      Route {s.route_index + 1}
-                    </div>
                     <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>
                       {s.duration_seconds ? `${Math.round(s.duration_seconds / 60)} min` : '—'}
                     </div>
@@ -219,7 +241,8 @@ export default function JobDetail({ jobId, onBack }) {
                       {s.distance_meters ? `${(s.distance_meters / 1000).toFixed(1)} km` : ''}
                     </div>
                   </div>
-                ))}
+                )
+              })()}
             </div>
           </>
         )}
@@ -231,11 +254,9 @@ export default function JobDetail({ jobId, onBack }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total snapshots</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{snapshots.length}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Routes tracked</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{routeCount}</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>
+              {snapshots.filter(s => (s.route_index ?? 0) === 0).length}
+            </div>
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Last collected</div>
@@ -245,11 +266,19 @@ export default function JobDetail({ jobId, onBack }) {
                 : '—'}
             </div>
           </div>
+          {job.status === 'running' && countdown != null && (
+            <div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Next cycle in</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--accent)' }}>
+                {countdown}s
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Timeline chart */}
-      {chartData.length > 0 && (
+        {chartData.length > 0 && (
         <div className="card">
           <h3 style={{ margin: '0 0 1rem 0' }}>Travel Time Over Time (minutes)</h3>
           <div style={{ height: 300 }}>
@@ -259,18 +288,14 @@ export default function JobDetail({ jobId, onBack }) {
                 <XAxis dataKey="formatted" stroke="var(--text-muted)" tick={{ fontSize: 10 }} />
                 <YAxis stroke="var(--text-muted)" tick={{ fontSize: 10 }} />
                 <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)' }} />
-                <Legend />
-                {Array.from({ length: routeCount }).map((_, i) => (
-                  <Line
-                    key={i}
-                    type="monotone"
-                    dataKey={`route_${i}`}
-                    name={`Route ${i + 1}`}
-                    stroke={colors[i % colors.length]}
-                    dot={false}
-                    connectNulls
-                  />
-                ))}
+                <Line
+                  type="monotone"
+                  dataKey="duration"
+                  name="Duration"
+                  stroke="#58a6ff"
+                  dot={false}
+                  connectNulls
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -280,6 +305,9 @@ export default function JobDetail({ jobId, onBack }) {
       {/* Results table */}
       <div className="card">
         <h3 style={{ margin: '0 0 1rem 0' }}>Collected Data</h3>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0 0 1rem 0' }}>
+          Click a row to view route map and turn-by-turn directions
+        </p>
         {snapshots.length === 0 ? (
           <div className="empty-state">
             <p>No data collected yet. Start the job to begin collecting.</p>
@@ -289,30 +317,52 @@ export default function JobDetail({ jobId, onBack }) {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  <th style={{ textAlign: 'left', padding: '0.5rem', width: 40 }} />
                   <th style={{ textAlign: 'left', padding: '0.5rem' }}>Collected At</th>
-                  <th style={{ textAlign: 'left', padding: '0.5rem' }}>Route</th>
                   <th style={{ textAlign: 'right', padding: '0.5rem' }}>Duration (min)</th>
                   <th style={{ textAlign: 'right', padding: '0.5rem' }}>Distance (km)</th>
                 </tr>
               </thead>
               <tbody>
-                {snapshots.slice(-50).reverse().map(s => (
-                  <tr key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '0.5rem' }}>{new Date(s.collected_at).toLocaleString()}</td>
-                    <td style={{ padding: '0.5rem' }}>Route {s.route_index + 1}</td>
-                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>
-                      {s.duration_seconds ? Math.round(s.duration_seconds / 60) : '—'}
-                    </td>
-                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>
-                      {s.distance_meters ? (s.distance_meters / 1000).toFixed(2) : '—'}
-                    </td>
-                  </tr>
-                ))}
+                {snapshots
+                  .filter(s => (s.route_index ?? 0) === 0)
+                  .slice(-50)
+                  .reverse()
+                  .map(s => (
+                    <React.Fragment key={s.id}>
+                      <tr
+                        onClick={() => setExpandedSnapshotId(prev => prev === s.id ? null : s.id)}
+                        style={{
+                          borderBottom: expandedSnapshotId === s.id ? 'none' : '1px solid var(--border)',
+                          cursor: 'pointer',
+                          background: expandedSnapshotId === s.id ? 'var(--surface)' : undefined,
+                        }}
+                      >
+                        <td style={{ padding: '0.5rem' }}>
+                          <span style={{ opacity: 0.7 }}>{expandedSnapshotId === s.id ? '▼' : '▶'}</span>
+                        </td>
+                        <td style={{ padding: '0.5rem' }}>{new Date(s.collected_at).toLocaleString()}</td>
+                        <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                          {s.duration_seconds ? Math.round(s.duration_seconds / 60) : '—'}
+                        </td>
+                        <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                          {s.distance_meters ? (s.distance_meters / 1000).toFixed(2) : '—'}
+                        </td>
+                      </tr>
+                      {expandedSnapshotId === s.id && (
+                        <tr key={`${s.id}-detail`}>
+                          <td colSpan={4} style={{ padding: 0, verticalAlign: 'top' }}>
+                            <SnapshotDetail snapshot={s} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
               </tbody>
             </table>
-            {snapshots.length > 50 && (
+            {snapshots.filter(s => (s.route_index ?? 0) === 0).length > 50 && (
               <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                Showing last 50 of {snapshots.length} snapshots
+                Showing last 50 of {snapshots.filter(s => (s.route_index ?? 0) === 0).length} snapshots
               </p>
             )}
           </div>

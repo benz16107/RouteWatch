@@ -24,6 +24,7 @@ export function initDatabase() {
       start_time TEXT DEFAULT (datetime('now')),
       end_time TEXT,
       cycle_minutes INTEGER DEFAULT 60,
+      cycle_seconds INTEGER DEFAULT 0,
       duration_days INTEGER DEFAULT 7,
       navigation_type TEXT DEFAULT 'driving',
       avoid_highways INTEGER DEFAULT 0,
@@ -50,6 +51,13 @@ export function initDatabase() {
       ON route_snapshots(job_id, collected_at);
     CREATE INDEX IF NOT EXISTS idx_snapshots_job_id ON route_snapshots(job_id);
   `);
+
+  try {
+    const cols = db.prepare("PRAGMA table_info(collection_jobs)").all();
+    if (!cols.some(c => c.name === 'cycle_seconds')) {
+      db.exec('ALTER TABLE collection_jobs ADD COLUMN cycle_seconds INTEGER DEFAULT 0');
+    }
+  } catch (_) {}
 
   return db;
 }

@@ -112,8 +112,14 @@ export default function JobDetail({ jobId, onBack, onFlipRoute }) {
 
   if (loading || !job) return <div className="card card-loading"><span className="loading-text">Loading job...</span></div>
 
-  const chartData = snapshots
-    .filter(s => (s.route_index ?? 0) === 0)
+  const primarySnapshots = snapshots.filter(s => (s.route_index ?? 0) === 0)
+  const withDuration = primarySnapshots.filter(s => s.duration_seconds != null)
+  const minDuration = withDuration.length ? Math.min(...withDuration.map(s => s.duration_seconds)) : null
+  const maxDuration = withDuration.length ? Math.max(...withDuration.map(s => s.duration_seconds)) : null
+  const minSnapshotId = minDuration != null ? withDuration.find(s => s.duration_seconds === minDuration)?.id : null
+  const maxSnapshotId = maxDuration != null ? withDuration.find(s => s.duration_seconds === maxDuration)?.id : null
+
+  const chartData = primarySnapshots
     .map(s => ({
       time: s.collected_at,
       formatted: new Date(s.collected_at).toLocaleString(),
@@ -290,7 +296,19 @@ export default function JobDetail({ jobId, onBack, onFlipRoute }) {
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total snapshots</div>
             <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>
-              {snapshots.filter(s => (s.route_index ?? 0) === 0).length}
+              {primarySnapshots.length}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Lowest time</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--success)' }}>
+              {minDuration != null ? `${Math.round(minDuration / 60)} min` : '—'}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Highest time</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--warning)' }}>
+              {maxDuration != null ? `${Math.round(maxDuration / 60)} min` : '—'}
             </div>
           </div>
           <div>

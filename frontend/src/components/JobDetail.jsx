@@ -83,7 +83,7 @@ export default function JobDetail({ jobId, onBack }) {
     window.open(`${API}/jobs/${jobId}/export?format=${format}`, '_blank')
   }
 
-  if (loading || !job) return <div className="card">Loading...</div>
+  if (loading || !job) return <div className="card card-loading"><span className="loading-text">Loading job...</span></div>
 
   const chartData = snapshots
     .filter(s => (s.route_index ?? 0) === 0)
@@ -287,12 +287,12 @@ export default function JobDetail({ jobId, onBack }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="formatted" stroke="var(--text-muted)" tick={{ fontSize: 10 }} />
                 <YAxis stroke="var(--text-muted)" tick={{ fontSize: 10 }} />
-                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)' }} />
+                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8 }} />
                 <Line
                   type="monotone"
                   dataKey="duration"
                   name="Duration"
-                  stroke="#58a6ff"
+                  stroke="#539bf5"
                   dot={false}
                   connectNulls
                 />

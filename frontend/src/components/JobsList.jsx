@@ -26,7 +26,7 @@ export default function JobsList({ onSelectJob }) {
     return () => clearInterval(interval)
   }, [])
 
-  if (loading) return <div className="card">Loading jobs...</div>
+  if (loading) return <div className="card card-loading"><span className="loading-text">Loading jobs...</span></div>
 
   if (jobs.length === 0) {
     return (
@@ -45,8 +45,7 @@ export default function JobsList({ onSelectJob }) {
       {jobs.map(job => (
         <div
           key={job.id}
-          className="card"
-          style={{ cursor: 'pointer' }}
+          className="card job-card"
           onClick={() => onSelectJob(job.id)}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>

@@ -33,7 +33,7 @@ function SnapshotMap({ points }) {
         />
         <Polyline
           positions={points.map(([lat, lng]) => [lat, lng])}
-          color="#58a6ff"
+          color="#539bf5"
           weight={4}
           opacity={0.8}
         />
@@ -58,7 +58,7 @@ export default function SnapshotDetail({ snapshot }) {
   const steps = details.steps ?? []
 
   return (
-    <div style={{ padding: '1rem', background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
+    <div className="snapshot-detail-panel">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
         <div>
           <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem' }}>Route</h4>

@@ -116,10 +116,15 @@ export default function EditJob({ job, onSaved, onCancel }) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form,
+          start_location: form.start_location,
+          end_location: form.end_location,
           start_time: form.start_time || null,
           end_time: form.end_time || null,
           ...getCyclePayload(),
+          duration_days: form.duration_days,
+          avoid_highways: form.avoid_highways,
+          avoid_tolls: form.avoid_tolls,
+          // navigation_type is not editable - set at creation only to keep data comparable
         }),
       })
       if (data?.error) throw new Error(data.error)
@@ -238,11 +243,17 @@ export default function EditJob({ job, onSaved, onCancel }) {
 
           <div className="form-group">
             <label>Navigation Type</label>
-            <select name="navigation_type" value={form.navigation_type} onChange={handleChange}>
-              <option value="driving">Driving</option>
-              <option value="walking">Walking</option>
-              <option value="transit">Transit</option>
-            </select>
+            <div
+              style={{
+                padding: '0.5rem 0.75rem',
+                background: 'var(--bg)',
+                borderRadius: 6,
+                fontSize: '0.9rem',
+                color: 'var(--text-muted)',
+              }}
+            >
+              {form.navigation_type || 'driving'} (set at creation, cannot be changed)
+            </div>
           </div>
 
           <div className="form-group">

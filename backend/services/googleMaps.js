@@ -98,20 +98,27 @@ export async function getRoutePolyline(origin, destination, options = {}) {
 }
 
 async function fetchDirections(origin, destination, { mode, avoidHighways, avoidTolls, alternatives, departureTime }) {
+  const resolvedMode = mode === 'transit' ? 'transit' : mode === 'walking' ? 'walking' : 'driving';
   const params = new URLSearchParams({
     origin,
     destination,
-    mode: mode === 'transit' ? 'transit' : mode === 'walking' ? 'walking' : 'driving',
+    mode: resolvedMode,
     alternatives: alternatives ? 'true' : 'false',
     key: process.env.GOOGLE_MAPS_API_KEY,
   });
-  const avoid = [];
-  if (avoidHighways) avoid.push('highways');
-  if (avoidTolls) avoid.push('tolls');
-  if (avoid.length) params.set('avoid', avoid.join('|'));
-  if (mode === 'driving' && departureTime) {
+  // avoid (highways, tolls) only applies to driving - omit for walking/transit to avoid wrong results
+  if (resolvedMode === 'driving') {
+    const avoid = [];
+    if (avoidHighways) avoid.push('highways');
+    if (avoidTolls) avoid.push('tolls');
+    if (avoid.length) params.set('avoid', avoid.join('|'));
+  }
+  if (resolvedMode === 'driving' && departureTime) {
     params.set('departure_time', departureTime);
     params.set('traffic_model', 'best_guess');
+  }
+  if (resolvedMode === 'transit') {
+    params.set('departure_time', 'now');
   }
 
   const res = await fetch(`${DIRECTIONS_API}?${params}`);

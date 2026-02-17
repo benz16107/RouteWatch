@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { initDatabase, getDb } from './db/init.js';
 import { startJob, stopJob, pauseJob, resumeJob, restoreRunningJobs } from './services/scheduler.js';
-import { getRoutePolyline } from './services/googleMaps.js';
+import { getRoutePolyline, reverseGeocode } from './services/googleMaps.js';
 import { mkdirSync, existsSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -184,6 +184,21 @@ app.post('/api/jobs/:id/resume', async (req, res) => {
     res.json(job);
   } catch (e) {
     handleError(res, e, 'POST /api/jobs/:id/resume');
+  }
+});
+
+// API: Reverse geocode lat,lng to address (for "current location" button)
+app.get('/api/reverse-geocode', async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat);
+    const lng = parseFloat(req.query.lng);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      return res.status(400).json({ error: 'lat and lng query parameters required' });
+    }
+    const address = await reverseGeocode(lat, lng);
+    res.json({ address });
+  } catch (e) {
+    handleError(res, e, 'GET /api/reverse-geocode');
   }
 });
 

@@ -7,6 +7,21 @@ const API = '/api'
 export default function JobsList({ onSelectJob }) {
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState(null)
+
+  const handleDelete = async (e, jobId) => {
+    e.stopPropagation()
+    if (!window.confirm('Delete this job and all its collected data? This cannot be undone.')) return
+    setDeletingId(jobId)
+    try {
+      await fetchJson(`${API}/jobs/${jobId}`, { method: 'DELETE' })
+      fetchJobs()
+    } catch (err) {
+      alert(err?.message || 'Failed to delete job')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const fetchJobs = async () => {
     try {
@@ -57,7 +72,18 @@ export default function JobsList({ onSelectJob }) {
                 {(job.cycle_seconds ?? 0) > 0 ? `${job.cycle_seconds} sec` : `${job.cycle_minutes ?? 60} min`} cycle • {job.duration_days} days • {job.navigation_type}
               </div>
             </div>
-            <span className={`status-badge status-${job.status}`}>{job.status}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span className={`status-badge status-${job.status}`}>{job.status}</span>
+              <button
+                className="btn btn-danger"
+                onClick={(e) => handleDelete(e, job.id)}
+                disabled={deletingId === job.id}
+                title="Delete this job"
+                style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+              >
+                {deletingId === job.id ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       ))}

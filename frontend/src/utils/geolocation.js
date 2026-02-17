@@ -1,4 +1,4 @@
-const NOMINATIM_REVERSE = 'https://nominatim.openstreetmap.org/reverse'
+const API = '/api'
 
 export function getCurrentLocation() {
   return new Promise((resolve, reject) => {
@@ -19,24 +19,14 @@ export function getCurrentLocation() {
   })
 }
 
-export async function reverseGeocode(lat, lng) {
-  const params = new URLSearchParams({
-    lat: String(lat),
-    lon: String(lng),
-    format: 'json',
-  })
-  const res = await fetch(`${NOMINATIM_REVERSE}?${params}`, {
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': 'RouteTrafficHistoryApp/1.0 (address lookup)',
-    },
-  })
-  const data = await res.json()
-  return data?.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
-}
-
 export async function getCurrentLocationAddress() {
   const { lat, lng } = await getCurrentLocation()
-  const address = await reverseGeocode(lat, lng)
-  return address
+  const params = new URLSearchParams({ lat: String(lat), lng: String(lng) })
+  const res = await fetch(`${API}/reverse-geocode?${params}`)
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data?.error || `Request failed: ${res.status}`)
+  }
+  const data = await res.json()
+  return data?.address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
 }

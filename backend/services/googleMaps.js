@@ -22,6 +22,21 @@ async function geocodeAddress(addr) {
   return null;
 }
 
+/** Reverse geocode lat,lng to a formatted address using Google Geocoding API */
+export async function reverseGeocode(lat, lng) {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey || apiKey === 'your_api_key_here') {
+    throw new Error('GOOGLE_MAPS_API_KEY not set in .env');
+  }
+  const params = new URLSearchParams({ latlng: `${lat},${lng}`, key: apiKey });
+  const res = await fetch(`${GEOCODE_API}?${params}`);
+  const data = await res.json();
+  if (data.status !== 'OK' || !data.results?.[0]) {
+    throw new Error(data.error_message || data.status || 'No address found');
+  }
+  return data.results[0].formatted_address;
+}
+
 function decodePolyline(encoded) {
   const points = [];
   let index = 0, lat = 0, lng = 0;

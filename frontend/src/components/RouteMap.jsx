@@ -84,7 +84,7 @@ export default function RouteMap({ origin, destination, travelMode = 'driving', 
       <MapContainer
         center={center}
         zoom={10}
-        style={{ height: '400px', width: '100%', borderRadius: '8px' }}
+        style={{ height: '180px', width: '100%', borderRadius: '8px' }}
         scrollWheelZoom={true}
       >
         <TileLayer

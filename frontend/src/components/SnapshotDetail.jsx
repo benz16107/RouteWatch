@@ -17,14 +17,14 @@ function FitBounds({ points }) {
 }
 
 function SnapshotMap({ points }) {
-  if (!points?.length) return <div className="map-placeholder" style={{ minHeight: 200 }}>No route geometry</div>
+  if (!points?.length) return <div className="map-placeholder" style={{ minHeight: 100 }}>No route geometry</div>
   const center = points[Math.floor(points.length / 2)]
   return (
     <div className="route-map-container" style={{ borderRadius: 8, overflow: 'hidden' }}>
       <MapContainer
         center={center}
         zoom={12}
-        style={{ height: 200, width: '100%' }}
+        style={{ height: 140, width: '100%' }}
         scrollWheelZoom={false}
       >
         <TileLayer
@@ -59,7 +59,7 @@ export default function SnapshotDetail({ snapshot }) {
 
   return (
     <div className="snapshot-detail-panel">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', alignItems: 'start' }}>
         <div>
           <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem' }}>Route</h4>
           <SnapshotMap points={points} />
@@ -69,7 +69,7 @@ export default function SnapshotDetail({ snapshot }) {
           {steps.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>No step data</p>
           ) : (
-            <ol style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.85rem', lineHeight: 1.6, maxHeight: 200, overflowY: 'auto' }}>
+            <ol style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.8rem', lineHeight: 1.5, maxHeight: 140, overflowY: 'auto' }}>
               {steps.map((step, i) => (
                 <li key={i} style={{ marginBottom: '0.5rem' }}>
                   <span dangerouslySetInnerHTML={{ __html: step.instruction }} />

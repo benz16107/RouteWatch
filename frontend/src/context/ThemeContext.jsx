@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 
 const ThemeContext = createContext()
 
-const STORAGE_KEY = 'route-tracker-theme'
+const STORAGE_KEY = 'routewatch-theme'
 
 export function ThemeProvider({ children }) {
   const [theme, setThemeState] = useState(() => {

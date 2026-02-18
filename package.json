@@ -1,7 +1,7 @@
 {
-  "name": "route-traffic-history-and-prediction",
+  "name": "routewatch",
   "version": "1.0.0",
-  "description": "Track and predict route travel times based on historical traffic data",
+  "description": "Track route travel times over time. Collect, store, and visualize traffic data.",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",

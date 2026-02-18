@@ -45,8 +45,8 @@ export default function Dashboard({ onSelectRoute, onNewRoute, onViewAllRoutes }
   return (
     <div className="dashboard">
       <div className="dashboard-hero">
-        <h1>Track how traffic changes over time</h1>
-        <p>Set a route, choose how often to check, and watch travel times build a history.</p>
+        <h1>RouteWatch</h1>
+        <p>Track how traffic changes over time. Set a route, choose how often to check, and watch travel times build a history.</p>
         <button className="btn btn-hero" onClick={onNewRoute}>
           <span className="btn-hero-icon">+</span>
           Track a new route
@@ -86,7 +86,7 @@ export default function Dashboard({ onSelectRoute, onNewRoute, onViewAllRoutes }
                 <circle cx="110" cy="60" r="6" fill="currentColor" opacity="0.8"/>
               </svg>
             </div>
-            <p>No routes yet. Track your first route to see how traffic varies.</p>
+            <p>No routes yet. Track your first route with RouteWatch to see how traffic varies.</p>
             <button className="btn btn-primary" onClick={onNewRoute}>
               Track your first route
             </button>

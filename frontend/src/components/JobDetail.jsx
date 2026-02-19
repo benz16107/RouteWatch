@@ -140,6 +140,9 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const maxDuration = withDuration.length ? Math.max(...withDuration.map(s => s.duration_seconds)) : null
   const minSnapshotId = minDuration != null ? withDuration.find(s => s.duration_seconds === minDuration)?.id : null
   const maxSnapshotId = maxDuration != null ? withDuration.find(s => s.duration_seconds === maxDuration)?.id : null
+  const totalAvgDuration = withDuration.length > 0
+    ? withDuration.reduce((sum, s) => sum + s.duration_seconds, 0) / withDuration.length
+    : null
 
   const formatTime = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
@@ -301,6 +304,12 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
               <span className="job-stat-label">Highest time</span>
               <span className="job-stat-value job-stat-warning">
                 {maxDuration != null ? `${Math.round(maxDuration / 60)} min` : '—'}
+              </span>
+            </div>
+            <div className="job-stat-cell">
+              <span className="job-stat-label">Total average</span>
+              <span className="job-stat-value">
+                {totalAvgDuration != null ? `${Math.round(totalAvgDuration / 60)} min` : '—'}
               </span>
             </div>
             {job.status === 'running' && countdown != null && (

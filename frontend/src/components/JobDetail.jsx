@@ -25,6 +25,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const [expandedSnapshotId, setExpandedSnapshotId] = useState(null)
   const [countdown, setCountdown] = useState(null)
   const [showActions, setShowActions] = useState(false)
+  const [chartRange, setChartRange] = useState('24h')
 
   const fetchData = async () => {
     try {
@@ -139,13 +140,31 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
 
   const formatTime = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
-  const chartData = primarySnapshots
+  const CHART_RANGES = [
+    { id: '24h', label: '24 hours', ms: 24 * 60 * 60 * 1000, timeOnly: true },
+    { id: '7d', label: '7 days', ms: 7 * 24 * 60 * 60 * 1000, timeOnly: false },
+    { id: '30d', label: '30 days', ms: 30 * 24 * 60 * 60 * 1000, timeOnly: false },
+    { id: 'all', label: 'All', ms: null, timeOnly: false },
+  ]
+  const activeRange = CHART_RANGES.find(r => r.id === chartRange) || CHART_RANGES[0]
+  const now = Date.now()
+  const cutoff = activeRange.ms == null ? 0 : now - activeRange.ms
+
+  const chartDataRaw = primarySnapshots
     .map(s => ({
       time: s.collected_at,
-      formatted: formatTime(s.collected_at),
+      ts: new Date(s.collected_at).getTime(),
       duration: s.duration_seconds ? Math.round(s.duration_seconds / 60) : null,
     }))
-    .sort((a, b) => new Date(a.time) - new Date(b.time))
+    .filter(d => d.ts >= cutoff)
+    .sort((a, b) => a.ts - b.ts)
+
+  const chartData = chartDataRaw.map(d => ({
+    ...d,
+    formatted: activeRange.timeOnly
+      ? new Date(d.time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+      : formatTime(d.time),
+  }))
 
   const latestSnap = primarySnapshots[primarySnapshots.length - 1]
 
@@ -275,12 +294,26 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
       </div>
 
       {/* Chart */}
-      {chartData.length > 0 && (
+      {(chartData.length > 0 || primarySnapshots.length > 0) && (
         <div className="job-detail-card">
-          <h4 className="job-detail-card-title">Travel time (min)</h4>
+          <div className="job-chart-header">
+            <h4 className="job-detail-card-title">Travel time (min)</h4>
+            <div className="job-chart-range">
+              {CHART_RANGES.map(r => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className={`btn btn-sm ${chartRange === r.id ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => setChartRange(r.id)}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="job-chart-wrap">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+              <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }} key={chartRange}>
                 <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
                 <XAxis dataKey="formatted" stroke="var(--text-muted)" tick={{ fontSize: 9 }} />
                 <YAxis stroke="var(--text-muted)" tick={{ fontSize: 9 }} width={28} />
@@ -289,6 +322,9 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
               </LineChart>
             </ResponsiveContainer>
           </div>
+          {chartData.length === 0 && (
+            <p className="job-empty-msg">No data in this range. Try &quot;All&quot; or a longer range.</p>
+          )}
         </div>
       )}
 

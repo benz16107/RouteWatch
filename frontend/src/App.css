@@ -1317,9 +1317,50 @@ body {
   width: auto;
 }
 
-.job-chart-wrap {
-  height: 180px;
+.job-chart-with-side {
+  display: flex;
+  gap: 1rem;
+  align-items: stretch;
+  min-height: 0;
 }
+
+.job-chart-wrap {
+  flex: 1;
+  height: 180px;
+  min-width: 0;
+}
+
+.job-chart-side-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--border);
+  min-width: 72px;
+}
+
+.job-chart-side-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.job-chart-side-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.job-chart-side-value {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.job-chart-side-low .job-chart-side-value { color: var(--success); }
+.job-chart-side-high .job-chart-side-value { color: var(--warning); }
 
 .job-table-wrap {
   overflow-x: auto;

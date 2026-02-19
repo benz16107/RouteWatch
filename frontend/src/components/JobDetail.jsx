@@ -8,6 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceDot,
 } from 'recharts'
 import RouteMap from './RouteMap'
 import EditJob from './EditJob'
@@ -28,7 +29,8 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const [showActions, setShowActions] = useState(false)
   const [chartRange, setChartRange] = useState('24h')
   const [chartSegment, setChartSegment] = useState('1h')
-  const [showAverageLine, setShowAverageLine] = useState(false)
+  const [showAverageLine, setShowAverageLine] = useState(true)
+  const [showMinMaxLines, setShowMinMaxLines] = useState(false)
 
   const fetchData = async () => {
     try {
@@ -201,6 +203,10 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const averageLabel = averageDuration != null
     ? `Avg (${activeRange.label}): ${averageDuration.toFixed(1)} min`
     : ''
+  const minDurationInRange = chartDurations.length > 0 ? Math.min(...chartDurations) : null
+  const maxDurationInRange = chartDurations.length > 0 ? Math.max(...chartDurations) : null
+  const minPoint = chartData.find((d) => d.duration === minDurationInRange)
+  const maxPoint = chartData.find((d) => d.duration === maxDurationInRange)
 
   const latestSnap = primarySnapshots[primarySnapshots.length - 1]
 
@@ -377,41 +383,87 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                     />
                     <span>Show average</span>
                   </label>
+                  <label className="job-chart-toggle">
+                    <input
+                      type="checkbox"
+                      checked={showMinMaxLines}
+                      onChange={(e) => setShowMinMaxLines(e.target.checked)}
+                    />
+                    <span>Show lowest & highest</span>
+                  </label>
                 </>
               )}
             </div>
           </div>
           {chartData.length > 0 ? (
-            <div className="job-chart-wrap">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }} key={`${chartRange}-${chartSegment}`}>
-                  <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
-                  <XAxis
-                    type="number"
-                    dataKey="ts"
-                    domain={[chartMinTs, chartMaxTs]}
-                    ticks={xAxisTicks}
-                    tickFormatter={formatXTick}
-                    stroke="var(--text-muted)"
-                    tick={{ fontSize: 9 }}
-                  />
-                  <YAxis stroke="var(--text-muted)" tick={{ fontSize: 9 }} width={28} />
-                  <Tooltip
-                    contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }}
-                    labelFormatter={(ts) => formatXTick(ts)}
-                  />
-                  <Line type="monotone" dataKey="duration" name="min" stroke="var(--accent)" dot={false} connectNulls strokeWidth={2} />
-                  {showAverageLine && averageDuration != null && (
-                    <ReferenceLine
-                      y={averageDuration}
-                      stroke="var(--warning)"
-                      strokeDasharray="4 4"
-                      strokeWidth={1.5}
-                      label={{ value: averageLabel, position: 'right', fill: 'var(--text-muted)', fontSize: 10 }}
+            <div className="job-chart-with-side">
+              <div className="job-chart-wrap">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }} key={`${chartRange}-${chartSegment}`}>
+                    <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                    <XAxis
+                      type="number"
+                      dataKey="ts"
+                      domain={[chartMinTs, chartMaxTs]}
+                      ticks={xAxisTicks}
+                      tickFormatter={formatXTick}
+                      stroke="var(--text-muted)"
+                      tick={{ fontSize: 9 }}
                     />
+                    <YAxis stroke="var(--text-muted)" tick={{ fontSize: 9 }} width={28} />
+                    <Tooltip
+                      contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }}
+                      labelFormatter={(ts) => formatXTick(ts)}
+                    />
+                    <Line type="monotone" dataKey="duration" name="min" stroke="var(--accent)" dot={false} connectNulls strokeWidth={2} />
+                    {showAverageLine && averageDuration != null && (
+                      <ReferenceLine
+                        y={averageDuration}
+                        stroke="var(--warning)"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                        label={{ value: averageLabel, position: 'right', fill: 'var(--text-muted)', fontSize: 10 }}
+                      />
+                    )}
+                    {showMinMaxLines && minPoint && (
+                      <ReferenceDot
+                        x={minPoint.ts}
+                        y={minPoint.duration}
+                        r={5}
+                        fill="var(--success)"
+                        stroke="var(--surface)"
+                        strokeWidth={2}
+                      />
+                    )}
+                    {showMinMaxLines && maxPoint && (
+                      <ReferenceDot
+                        x={maxPoint.ts}
+                        y={maxPoint.duration}
+                        r={5}
+                        fill="var(--warning)"
+                        stroke="var(--surface)"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              {(minDurationInRange != null || maxDurationInRange != null) && (
+                <div className="job-chart-side-labels">
+                  {minDurationInRange != null && (
+                    <div className="job-chart-side-item job-chart-side-low">
+                      <span className="job-chart-side-label">Low</span>
+                      <span className="job-chart-side-value">{minDurationInRange.toFixed(1)} min</span>
+                    </div>
                   )}
-                </LineChart>
-              </ResponsiveContainer>
+                  {maxDurationInRange != null && (
+                    <div className="job-chart-side-item job-chart-side-high">
+                      <span className="job-chart-side-label">High</span>
+                      <span className="job-chart-side-value">{maxDurationInRange.toFixed(1)} min</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <p className="job-empty-msg">No data in this range. Try another range or &quot;All&quot;.</p>

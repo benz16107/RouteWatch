@@ -19,6 +19,9 @@ export function initDatabase() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS collection_jobs (
       id TEXT PRIMARY KEY,
+      name TEXT,
+      start_name TEXT,
+      end_name TEXT,
       start_location TEXT NOT NULL,
       end_location TEXT NOT NULL,
       start_time TEXT DEFAULT (datetime('now')),
@@ -56,6 +59,15 @@ export function initDatabase() {
     const cols = db.prepare("PRAGMA table_info(collection_jobs)").all();
     if (!cols.some(c => c.name === 'cycle_seconds')) {
       db.exec('ALTER TABLE collection_jobs ADD COLUMN cycle_seconds INTEGER DEFAULT 0');
+    }
+    if (!cols.some(c => c.name === 'name')) {
+      db.exec('ALTER TABLE collection_jobs ADD COLUMN name TEXT');
+    }
+    if (!cols.some(c => c.name === 'start_name')) {
+      db.exec('ALTER TABLE collection_jobs ADD COLUMN start_name TEXT');
+    }
+    if (!cols.some(c => c.name === 'end_name')) {
+      db.exec('ALTER TABLE collection_jobs ADD COLUMN end_name TEXT');
     }
   } catch (_) {}
 

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
-  LineChart,
-  Line,
+  ScatterChart,
+  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -14,9 +14,24 @@ import RouteMap from './RouteMap'
 import EditJob from './EditJob'
 import SnapshotDetail from './SnapshotDetail'
 import { fetchJson } from '../utils/api.js'
-import { shortenToStreet } from '../utils/formatAddress.js'
+import { formatJobMetaShort, getJobTitle, getJobSubtitle } from '../utils/formatJob.js'
 
 const API = '/api'
+const HOUR_MS = 60 * 60 * 1000
+const CHART_RANGES = [
+  { id: '24h', label: '24 hours', ms: 24 * HOUR_MS, timeOnly: true },
+  { id: '7d', label: '7 days', ms: 7 * 24 * HOUR_MS, timeOnly: false },
+  { id: '30d', label: '30 days', ms: 30 * 24 * HOUR_MS, timeOnly: false },
+  { id: 'all', label: 'All', ms: null, timeOnly: false },
+]
+
+const CHART_MARGIN_RIGHT = 88
+
+function ScatterDot(props) {
+  const { cx, cy, fill } = props
+  if (cx == null || cy == null) return null
+  return <circle cx={cx} cy={cy} r={1} fill={fill} />
+}
 
 export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const [job, setJob] = useState(null)
@@ -28,9 +43,12 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const [countdown, setCountdown] = useState(null)
   const [showActions, setShowActions] = useState(false)
   const [chartRange, setChartRange] = useState('24h')
-  const [chartSegment, setChartSegment] = useState('1h')
   const [showAverageLine, setShowAverageLine] = useState(true)
-  const [showMinMaxLines, setShowMinMaxLines] = useState(false)
+  const [showMinMaxLines, setShowMinMaxLines] = useState(true)
+  const chartScrollRef = useRef(null)
+  const [chartTooltip, setChartTooltip] = useState({ point: null, x: 0, y: 0 })
+  const chartTooltipRafRef = useRef(null)
+  const chartTooltipPendingRef = useRef(null)
 
   const fetchData = async () => {
     try {
@@ -72,6 +90,17 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
     const t = setInterval(tick, 1000)
     return () => clearInterval(t)
   }, [job?.status, job?.cycle_seconds, job?.cycle_minutes, snapshots])
+
+  useEffect(() => {
+    const el = chartScrollRef.current
+    if (!el) return
+    const scrollToRight = () => {
+      el.scrollLeft = el.scrollWidth - el.clientWidth
+    }
+    scrollToRight()
+    const t = requestAnimationFrame(scrollToRight)
+    return () => cancelAnimationFrame(t)
+  }, [job?.id, snapshots.length, chartRange])
 
   const runAction = async (action) => {
     setActionLoading(action)
@@ -134,9 +163,10 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
     }
   }
 
-  if (loading || !job) return <div className="card card-loading card-compact"><span className="loading-text">Loading...</span></div>
-
-  const primarySnapshots = snapshots.filter(s => (s.route_index ?? 0) === 0)
+  const primarySnapshots = useMemo(
+    () => snapshots.filter(s => (s.route_index ?? 0) === 0),
+    [snapshots]
+  )
   const withDuration = primarySnapshots.filter(s => s.duration_seconds != null)
   const minDuration = withDuration.length ? Math.min(...withDuration.map(s => s.duration_seconds)) : null
   const maxDuration = withDuration.length ? Math.max(...withDuration.map(s => s.duration_seconds)) : null
@@ -146,73 +176,152 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
     ? withDuration.reduce((sum, s) => sum + s.duration_seconds, 0) / withDuration.length
     : null
 
-  const formatTime = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  const formatTime = useCallback(
+    (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+    []
+  )
 
-  const CHART_RANGES = [
-    { id: '24h', label: '24 hours', ms: 24 * 60 * 60 * 1000, timeOnly: true },
-    { id: '7d', label: '7 days', ms: 7 * 24 * 60 * 60 * 1000, timeOnly: false },
-    { id: '30d', label: '30 days', ms: 30 * 24 * 60 * 60 * 1000, timeOnly: false },
-    { id: 'all', label: 'All', ms: null, timeOnly: false },
-  ]
   const activeRange = CHART_RANGES.find(r => r.id === chartRange) || CHART_RANGES[0]
-  const now = Date.now()
-  const cutoff = activeRange.ms == null ? 0 : now - activeRange.ms
-
-  const chartDataRaw = primarySnapshots
-    .map(s => ({
-      time: s.collected_at,
-      ts: new Date(s.collected_at).getTime(),
-      duration: s.duration_seconds ? Math.round(s.duration_seconds / 60) : null,
-    }))
-    .filter(d => d.ts >= cutoff)
-    .sort((a, b) => a.ts - b.ts)
-
-  const chartData = chartDataRaw.map(d => ({
-    ...d,
-    formatted: activeRange.timeOnly
-      ? new Date(d.time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-      : formatTime(d.time),
-  }))
-
-  const SEGMENT_MS = { '15m': 15 * 60 * 1000, '1h': 60 * 60 * 1000, '2h': 2 * 60 * 60 * 1000, '6h': 6 * 60 * 60 * 1000, '12h': 12 * 60 * 60 * 1000, '1d': 24 * 60 * 60 * 1000 }
-  const chartSegmentMs = SEGMENT_MS[chartSegment] ?? SEGMENT_MS['1h']
-  const chartMinTs = chartData.length > 0 ? chartData[0].ts : now
-  const chartMaxTs = chartData.length > 0 ? chartData[chartData.length - 1].ts : now
-  const xAxisTicks = (() => {
-    if (chartData.length === 0) return []
-    const ticks = []
-    let t = Math.floor(chartMinTs / chartSegmentMs) * chartSegmentMs
-    while (t <= chartMaxTs + 1) {
-      ticks.push(t)
-      t += chartSegmentMs
+  const chartState = useMemo(() => {
+    const now = Date.now()
+    const cutoff = activeRange.ms == null ? 0 : now - activeRange.ms
+    const data = primarySnapshots
+      .filter(s => new Date(s.collected_at).getTime() >= cutoff)
+      .map(s => ({
+        ts: new Date(s.collected_at).getTime(),
+        duration: s.duration_seconds != null ? Math.round(s.duration_seconds / 60) : null,
+      }))
+      .sort((a, b) => a.ts - b.ts)
+    const scatter = data.filter(d => d.duration != null)
+    const minTs = data.length > 0 ? data[0].ts : now
+    const maxTs = data.length > 0 ? data[data.length - 1].ts : now
+    let ticks = []
+    if (data.length > 0 && chartRange !== 'all' && chartRange !== '30d') {
+      if (chartRange === '7d') {
+        const d = new Date(minTs)
+        d.setHours(0, 0, 0, 0)
+        let t = d.getTime()
+        while (t <= maxTs + 1) {
+          ticks.push(t)
+          t += 12 * HOUR_MS
+        }
+      } else {
+        const start = Math.floor(minTs / HOUR_MS) * HOUR_MS
+        let t = start
+        while (t <= maxTs + 1) {
+          ticks.push(t)
+          t += HOUR_MS
+        }
+      }
     }
-    const maxTicks = 12
-    if (ticks.length <= maxTicks) return ticks
-    const step = (ticks.length - 1) / (maxTicks - 1)
-    return Array.from({ length: maxTicks }, (_, i) => ticks[Math.round(i * step)])
-  })()
-  const formatXTick = (ts) => activeRange.timeOnly
-    ? new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-    : formatTime(new Date(ts).toISOString())
+    const durations = data.map(d => d.duration).filter(v => v != null)
+    const avg = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : null
+    const minD = durations.length > 0 ? Math.min(...durations) : null
+    const maxD = durations.length > 0 ? Math.max(...durations) : null
+    const minPoints = minD != null ? data.filter(d => d.duration === minD) : []
+    const maxPoints = maxD != null ? data.filter(d => d.duration === maxD) : []
+    return {
+      chartData: data,
+      scatterData: scatter,
+      chartMinTs: minTs,
+      chartMaxTs: maxTs,
+      xAxisTicks: ticks,
+      averageDuration: avg,
+      minDurationInRange: minD,
+      maxDurationInRange: maxD,
+      minPoints,
+      maxPoints,
+    }
+  }, [primarySnapshots, chartRange])
 
-  // Average over the currently selected range only
-  const chartDurations = chartData.map(d => d.duration).filter((v) => v != null)
-  const averageDuration = chartDurations.length > 0
-    ? chartDurations.reduce((a, b) => a + b, 0) / chartDurations.length
-    : null
-  const averageLabel = averageDuration != null
-    ? `Avg (${activeRange.label}): ${averageDuration.toFixed(1)} min`
-    : ''
-  const minDurationInRange = chartDurations.length > 0 ? Math.min(...chartDurations) : null
-  const maxDurationInRange = chartDurations.length > 0 ? Math.max(...chartDurations) : null
-  const minPoint = chartData.find((d) => d.duration === minDurationInRange)
-  const maxPoint = chartData.find((d) => d.duration === maxDurationInRange)
+  const {
+    chartData,
+    scatterData,
+    chartMinTs,
+    chartMaxTs,
+    xAxisTicks,
+    averageDuration,
+    minDurationInRange,
+    maxDurationInRange,
+    minPoints,
+    maxPoints,
+  } = chartState
+
+  const formatXTick = useCallback(
+    (ts) =>
+      activeRange.timeOnly
+        ? new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+        : formatTime(new Date(ts).toISOString()),
+    [activeRange.timeOnly, formatTime]
+  )
+  const formatXAxisTick = useCallback(
+    (ts) => {
+      if (chartRange === '7d') {
+        const d = new Date(ts)
+        const day = d.toLocaleDateString(undefined, { weekday: 'short' })
+        return d.getHours() === 0 ? `${day} 12 AM` : `${day} 12 PM`
+      }
+      return new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric' })
+    },
+    [chartRange]
+  )
+
+  const handleChartMouseMove = useCallback(
+    (e) => {
+      const el = chartScrollRef.current
+      if (!el || !scatterData.length) return
+      const rect = el.getBoundingClientRect()
+      const plotWidth = el.scrollWidth - CHART_MARGIN_RIGHT
+      if (plotWidth <= 0) return
+      const plotX = Math.max(0, Math.min(plotWidth, el.scrollLeft + (e.clientX - rect.left)))
+      const ratio = plotX / plotWidth
+      const cursorTime = chartMinTs + ratio * (chartMaxTs - chartMinTs)
+      let point = scatterData[0]
+      let minDist = Infinity
+      for (let i = 0; i < scatterData.length; i++) {
+        const d = scatterData[i]
+        const dist = Math.abs(d.ts - cursorTime)
+        if (dist < minDist) {
+          minDist = dist
+          point = d
+        }
+      }
+      const next = { point, x: e.clientX - 12, y: e.clientY }
+      chartTooltipPendingRef.current = next
+      if (chartTooltipRafRef.current == null) {
+        chartTooltipRafRef.current = requestAnimationFrame(() => {
+          chartTooltipRafRef.current = null
+          if (chartTooltipPendingRef.current) {
+            setChartTooltip(chartTooltipPendingRef.current)
+          }
+        })
+      }
+    },
+    [scatterData, chartMinTs, chartMaxTs]
+  )
+
+  const handleChartMouseLeave = useCallback(() => {
+    if (chartTooltipRafRef.current != null) {
+      cancelAnimationFrame(chartTooltipRafRef.current)
+      chartTooltipRafRef.current = null
+    }
+    chartTooltipPendingRef.current = null
+    setChartTooltip({ point: null, x: 0, y: 0 })
+  }, [])
 
   const latestSnap = primarySnapshots[primarySnapshots.length - 1]
 
   const ActionBtn = ({ onClick, children, variant = 'secondary', disabled }) => (
-    <button className={`btn btn-${variant}`} onClick={onClick} disabled={disabled}>{children}</button>
+    <button type="button" className={`btn btn-sm btn-${variant}`} onClick={onClick} disabled={disabled}>{children}</button>
   )
+
+  if (loading || !job) {
+    return (
+      <div className="card card-loading card-compact">
+        <span className="loading-text">Loading...</span>
+      </div>
+    )
+  }
 
   return (
     <div className="job-detail-page">
@@ -221,56 +330,47 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
         <div className="job-detail-title">
           <div className="job-route-line">
             <span className="job-route-text">
-              {shortenToStreet(job.start_location)}
-              <span className="job-route-arrow">→</span>
-              {shortenToStreet(job.end_location)}
+              {getJobTitle(job)}
             </span>
             <span className={`status-badge status-${job.status}`}>{job.status}</span>
           </div>
+          {getJobSubtitle(job) && (
+            <div className="job-detail-subtitle">{getJobSubtitle(job)}</div>
+          )}
           <div className="job-meta-line">
-            {(job.cycle_seconds ?? 0) > 0 ? `${job.cycle_seconds}s` : `${job.cycle_minutes ?? 60}m`} cycle
-            <span className="job-meta-sep">·</span>
-            {job.duration_days} days
-            <span className="job-meta-sep">·</span>
-            {job.navigation_type}
-            {job.avoid_highways && <><span className="job-meta-sep">·</span>Avoid highways</>}
-            {job.avoid_tolls && <><span className="job-meta-sep">·</span>Avoid tolls</>}
-          </div>
-        </div>
-        <div className="job-detail-actions">
-          {(job.status === 'pending' || job.status === 'completed') && (
-            <ActionBtn variant="success" onClick={() => runAction('start')} disabled={!!actionLoading}>
-              {actionLoading === 'start' ? '…' : (job.status === 'completed' ? 'Continue' : 'Start')}
-            </ActionBtn>
-          )}
-          {job.status === 'running' && (
-            <>
-              <ActionBtn variant="warning" onClick={() => runAction('pause')} disabled={!!actionLoading}>{actionLoading === 'pause' ? '…' : 'Pause'}</ActionBtn>
-              <ActionBtn variant="danger" onClick={() => runAction('stop')} disabled={!!actionLoading}>{actionLoading === 'stop' ? '…' : 'Stop'}</ActionBtn>
-            </>
-          )}
-          {job.status === 'paused' && (
-            <>
-              <ActionBtn variant="success" onClick={() => runAction('resume')} disabled={!!actionLoading}>{actionLoading === 'resume' ? '…' : 'Resume'}</ActionBtn>
-              <ActionBtn variant="danger" onClick={() => runAction('stop')} disabled={!!actionLoading}>{actionLoading === 'stop' ? '…' : 'Stop'}</ActionBtn>
-            </>
-          )}
-          {job.status !== 'running' && (
-            <ActionBtn onClick={() => setEditing(true)}>Edit</ActionBtn>
-          )}
-          <div className="job-actions-dropdown">
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowActions(!showActions)}>⋮</button>
-            {showActions && (
-              <>
-                <div className="job-actions-overlay" onClick={() => setShowActions(false)} />
-                <div className="job-actions-menu">
-                  <button onClick={handleCreateFlippedJob} disabled={!!actionLoading}>Reverse route</button>
-                  <button onClick={() => handleExport('json')}>Export JSON</button>
-                  <button onClick={() => handleExport('csv')}>Export CSV</button>
-                  <button className="danger" onClick={handleDelete} disabled={!!actionLoading}>{actionLoading === 'delete' ? 'Deleting…' : 'Delete'}</button>
-                </div>
-              </>
-            )}
+            <span className="job-meta-text">{formatJobMetaShort(job)}</span>
+            <div className="job-detail-actions">
+              {job.status === 'running' && (
+                <>
+                  <ActionBtn variant="warning" onClick={() => runAction('pause')} disabled={!!actionLoading}>{actionLoading === 'pause' ? '…' : 'Pause'}</ActionBtn>
+                  <ActionBtn variant="danger" onClick={() => runAction('stop')} disabled={!!actionLoading}>{actionLoading === 'stop' ? '…' : 'Stop'}</ActionBtn>
+                </>
+              )}
+              {job.status === 'paused' && (
+                <>
+                  <ActionBtn variant="success" onClick={() => runAction('resume')} disabled={!!actionLoading}>{actionLoading === 'resume' ? '…' : 'Resume'}</ActionBtn>
+                  <ActionBtn variant="danger" onClick={() => runAction('stop')} disabled={!!actionLoading}>{actionLoading === 'stop' ? '…' : 'Stop'}</ActionBtn>
+                </>
+              )}
+              {job.status !== 'running' && job.status !== 'paused' && (
+                <ActionBtn onClick={() => setEditing(true)}>Edit</ActionBtn>
+              )}
+              <div className="job-actions-dropdown">
+                <button className="btn btn-secondary btn-sm" onClick={() => setShowActions(!showActions)} aria-label="More options">⋮</button>
+                {showActions && (
+                  <>
+                    <div className="job-actions-overlay" onClick={() => setShowActions(false)} />
+                    <div className="job-actions-menu">
+                      <button onClick={() => { setShowActions(false); setEditing(true); }} disabled={!!actionLoading}>Edit</button>
+                      <button onClick={handleCreateFlippedJob} disabled={!!actionLoading}>Reverse route</button>
+                      <button onClick={() => handleExport('json')}>Export JSON</button>
+                      <button onClick={() => handleExport('csv')}>Export CSV</button>
+                      <button className="danger" onClick={handleDelete} disabled={!!actionLoading}>{actionLoading === 'delete' ? 'Deleting…' : 'Delete'}</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -362,19 +462,6 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
               </div>
               {chartData.length > 0 && (
                 <>
-                  <div className="job-chart-range">
-                    <span className="job-chart-control-label">Tick:</span>
-                    {Object.keys(SEGMENT_MS).map(seg => (
-                      <button
-                        key={seg}
-                        type="button"
-                        className={`btn btn-sm ${chartSegment === seg ? 'btn-primary' : 'btn-ghost'}`}
-                        onClick={() => setChartSegment(seg)}
-                      >
-                        {seg}
-                      </button>
-                    ))}
-                  </div>
                   <label className="job-chart-toggle">
                     <input
                       type="checkbox"
@@ -398,68 +485,131 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
           {chartData.length > 0 ? (
             <div className="job-chart-with-side">
               <div className="job-chart-wrap">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }} key={`${chartRange}-${chartSegment}`}>
-                    <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
-                    <XAxis
-                      type="number"
-                      dataKey="ts"
-                      domain={[chartMinTs, chartMaxTs]}
-                      ticks={xAxisTicks}
-                      tickFormatter={formatXTick}
-                      stroke="var(--text-muted)"
-                      tick={{ fontSize: 9 }}
-                    />
-                    <YAxis stroke="var(--text-muted)" tick={{ fontSize: 9 }} width={28} />
-                    <Tooltip
-                      contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }}
-                      labelFormatter={(ts) => formatXTick(ts)}
-                    />
-                    <Line type="monotone" dataKey="duration" name="min" stroke="var(--accent)" dot={false} connectNulls strokeWidth={2} />
-                    {showAverageLine && averageDuration != null && (
-                      <ReferenceLine
-                        y={averageDuration}
-                        stroke="var(--warning)"
-                        strokeDasharray="4 4"
-                        strokeWidth={1.5}
-                        label={{ value: averageLabel, position: 'right', fill: 'var(--text-muted)', fontSize: 10 }}
-                      />
-                    )}
-                    {showMinMaxLines && minPoint && (
-                      <ReferenceDot
-                        x={minPoint.ts}
-                        y={minPoint.duration}
-                        r={5}
-                        fill="var(--success)"
-                        stroke="var(--surface)"
-                        strokeWidth={2}
-                      />
-                    )}
-                    {showMinMaxLines && maxPoint && (
-                      <ReferenceDot
-                        x={maxPoint.ts}
-                        y={maxPoint.duration}
-                        r={5}
-                        fill="var(--warning)"
-                        stroke="var(--surface)"
-                        strokeWidth={2}
-                      />
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
+                <div
+                  ref={chartScrollRef}
+                  className="job-chart-scroll"
+                  onMouseMove={handleChartMouseMove}
+                  onMouseLeave={handleChartMouseLeave}
+                >
+                  <div className="job-chart-inner">
+                    <ResponsiveContainer width="100%" height={180}>
+                      <ScatterChart
+                        data={scatterData}
+                        margin={{ top: 4, right: CHART_MARGIN_RIGHT, left: 0, bottom: 4 }}
+                        key={chartRange}
+                      >
+                        <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                        <XAxis
+                          type="number"
+                          dataKey="ts"
+                          domain={[chartMinTs, chartMaxTs]}
+                          ticks={xAxisTicks}
+                          interval={0}
+                          tickFormatter={formatXAxisTick}
+                          stroke="var(--text-muted)"
+                          tick={{ fontSize: 9 }}
+                        />
+                        <YAxis
+                          type="number"
+                          dataKey="duration"
+                          stroke="var(--text-muted)"
+                          tick={{ fontSize: 9 }}
+                          width={28}
+                        />
+                        <Tooltip content={() => null} cursor={false} />
+                        <Scatter dataKey="duration" fill="var(--accent)" shape={ScatterDot} />
+                        {chartTooltip.point && (
+                          <ReferenceDot
+                            x={chartTooltip.point.ts}
+                            y={chartTooltip.point.duration}
+                            r={6}
+                            fill="transparent"
+                            stroke="var(--accent)"
+                            strokeWidth={2}
+                          />
+                        )}
+                        {showAverageLine && averageDuration != null && (
+                          <ReferenceLine
+                            y={averageDuration}
+                            stroke="var(--warning)"
+                            strokeDasharray="4 4"
+                            strokeWidth={1.5}
+                          />
+                        )}
+                        {showMinMaxLines && minPoints.map((pt, i) => (
+                          <ReferenceDot
+                            key={`min-${pt.ts}-${i}`}
+                            x={pt.ts}
+                            y={pt.duration}
+                            r={5}
+                            fill="var(--success)"
+                            stroke="var(--surface)"
+                            strokeWidth={2}
+                          />
+                        ))}
+                        {showMinMaxLines && maxPoints.map((pt, i) => (
+                          <ReferenceDot
+                            key={`max-${pt.ts}-${i}`}
+                            x={pt.ts}
+                            y={pt.duration}
+                            r={5}
+                            fill="var(--warning)"
+                            stroke="var(--surface)"
+                            strokeWidth={2}
+                          />
+                        ))}
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                {chartTooltip.point && (
+                  <div
+                    className="job-chart-custom-tooltip"
+                    style={{
+                      position: 'fixed',
+                      left: chartTooltip.x,
+                      top: chartTooltip.y,
+                      transform: 'translate(-100%, -50%)',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <div className="job-chart-custom-tooltip-label">
+                      {formatXTick(chartTooltip.point.ts)}
+                    </div>
+                    <div className="job-chart-custom-tooltip-value">
+                      {chartTooltip.point.duration} min
+                    </div>
+                  </div>
+                )}
               </div>
-              {(minDurationInRange != null || maxDurationInRange != null) && (
+              {(minDurationInRange != null || maxDurationInRange != null || averageDuration != null) && (
                 <div className="job-chart-side-labels">
-                  {minDurationInRange != null && (
+                  {minDurationInRange != null && minPoints.length > 0 && (
                     <div className="job-chart-side-item job-chart-side-low">
                       <span className="job-chart-side-label">Low</span>
+                      <span className="job-chart-side-time">
+                        {minPoints.length === 1
+                          ? formatXTick(minPoints[0].ts)
+                          : `${minPoints.length} times`}
+                      </span>
                       <span className="job-chart-side-value">{minDurationInRange.toFixed(1)} min</span>
                     </div>
                   )}
-                  {maxDurationInRange != null && (
+                  {maxDurationInRange != null && maxPoints.length > 0 && (
                     <div className="job-chart-side-item job-chart-side-high">
                       <span className="job-chart-side-label">High</span>
+                      <span className="job-chart-side-time">
+                        {maxPoints.length === 1
+                          ? formatXTick(maxPoints[0].ts)
+                          : `${maxPoints.length} times`}
+                      </span>
                       <span className="job-chart-side-value">{maxDurationInRange.toFixed(1)} min</span>
+                    </div>
+                  )}
+                  {averageDuration != null && (
+                    <div className="job-chart-side-item job-chart-side-avg">
+                      <span className="job-chart-side-label">Avg ({activeRange.label})</span>
+                      <span className="job-chart-side-value">{averageDuration.toFixed(1)} min</span>
                     </div>
                   )}
                 </div>
@@ -482,8 +632,8 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
             <table className="job-table">
               <thead>
                 <tr>
-                  <th style={{ width: 24 }} />
-                  <th>Collected</th>
+                  <th></th>
+                  <th>Time</th>
                   <th className="num">Duration</th>
                   <th className="num">Distance</th>
                 </tr>

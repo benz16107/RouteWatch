@@ -19,6 +19,9 @@ export default function EditJob({ job, onSaved, onCancel }) {
   const [form, setForm] = useState({
     start_location: '',
     end_location: '',
+    start_name: '',
+    end_name: '',
+    name: '',
     start_time: '',
     end_time: '',
     cycle_value: 60,
@@ -36,6 +39,9 @@ export default function EditJob({ job, onSaved, onCancel }) {
       setForm({
         start_location: job.start_location || '',
         end_location: job.end_location || '',
+        start_name: job.start_name || '',
+        end_name: job.end_name || '',
+        name: job.name || '',
         start_time: toDatetimeLocal(job.start_time),
         end_time: toDatetimeLocal(job.end_time),
         cycle_value: cycleVal,
@@ -118,6 +124,9 @@ export default function EditJob({ job, onSaved, onCancel }) {
         body: JSON.stringify({
           start_location: form.start_location,
           end_location: form.end_location,
+          name: form.name?.trim() || null,
+          start_name: form.start_name?.trim() || null,
+          end_name: form.end_name?.trim() || null,
           start_time: form.start_time || null,
           end_time: form.end_time || null,
           ...getCyclePayload(),
@@ -166,6 +175,15 @@ export default function EditJob({ job, onSaved, onCancel }) {
                 {locationLoading ? '...' : 'Current location'}
               </button>
             </div>
+            <input
+              type="text"
+              name="start_name"
+              value={form.start_name}
+              onChange={handleChange}
+              placeholder="Custom name (e.g. Home)"
+              maxLength={80}
+              style={{ marginTop: '0.35rem' }}
+            />
           </div>
           <div className="form-group">
             <label>Destination Location</label>
@@ -176,6 +194,30 @@ export default function EditJob({ job, onSaved, onCancel }) {
               id="edit_end_location"
               required
             />
+            <input
+              type="text"
+              name="end_name"
+              value={form.end_name}
+              onChange={handleChange}
+              placeholder="Custom name (e.g. Office)"
+              maxLength={80}
+              style={{ marginTop: '0.35rem' }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Route title (optional)</label>
+            <input
+              type="text"
+              name="name"
+              value={form.name}
+              onChange={handleChange}
+              placeholder="Overrides start → end as the main title"
+              maxLength={120}
+            />
+            <p style={{ margin: '0.35rem 0 0', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+              If set, this is the main title; start/end names show as subtitle.
+            </p>
           </div>
 
           <div className="form-row">

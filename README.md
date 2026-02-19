@@ -59,7 +59,9 @@ npm run dev
 ```
 
 - **Backend:** http://localhost:3001
-- **Frontend:** http://localhost:5173 (proxies `/api` to backend)
+- **Frontend (Vite):** http://localhost:5173 (or next free port, e.g. 5174); proxies `/api` to backend
+
+**Why does 3001 show an old UI?** The backend serves the built frontend from `frontend/dist`. That folder is only updated when you run `npm run build` in the frontend. While developing, use the Vite URL (e.g. 5174) to see live changes. To see your latest UI on 3001, run `npm run build` from the repo root (or `cd frontend && npm run build`), then reload http://localhost:3001.
 
 ## Build for production
 

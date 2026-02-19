@@ -15,6 +15,9 @@ export default function RouteWizard({ onCreated, onCancel }) {
   const [form, setForm] = useState({
     start_location: '',
     end_location: '',
+    start_name: '',
+    end_name: '',
+    name: '',
     start_time: '',
     end_time: '',
     cycle_value: 60,
@@ -63,6 +66,9 @@ export default function RouteWizard({ onCreated, onCancel }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          name: form.name?.trim() || null,
+          start_name: form.start_name?.trim() || null,
+          end_name: form.end_name?.trim() || null,
           start_time: form.start_time || null,
           end_time: form.end_time || null,
           ...getCyclePayload(),
@@ -160,6 +166,15 @@ export default function RouteWizard({ onCreated, onCancel }) {
                   {locationLoading ? '…' : '📍'}
                 </button>
               </div>
+              <input
+                type="text"
+                name="start_name"
+                value={form.start_name}
+                onChange={handleChange}
+                placeholder="Custom name (e.g. Home)"
+                className="form-group-custom-name"
+                maxLength={80}
+              />
             </div>
             <div className="form-group">
               <label>To</label>
@@ -169,6 +184,15 @@ export default function RouteWizard({ onCreated, onCancel }) {
                 placeholder="Destination address"
                 id="wiz_end"
                 required
+              />
+              <input
+                type="text"
+                name="end_name"
+                value={form.end_name}
+                onChange={handleChange}
+                placeholder="Custom name (e.g. Office)"
+                className="form-group-custom-name"
+                maxLength={80}
               />
             </div>
           </div>
@@ -237,14 +261,30 @@ export default function RouteWizard({ onCreated, onCancel }) {
         {step === 2 && (
           <div className="wizard-panel">
             <h2>Ready to track</h2>
-            <p className="wizard-desc">Review and start collecting.</p>
+            <p className="wizard-desc">Review and add an optional route title.</p>
             <div className="review-card">
               <div className="review-route">
-                {form.start_location || '—'} → {form.end_location || '—'}
+                {(form.start_name || form.end_name)
+                  ? `${form.start_name || form.start_location || '—'} → ${form.end_name || form.end_location || '—'}`
+                  : `${form.start_location || '—'} → ${form.end_location || '—'}`}
               </div>
               <div className="review-meta">
                 Every {form.cycle_unit === 'seconds' ? `${form.cycle_value} sec` : `${form.cycle_value} min`} · {form.duration_days} days · {form.navigation_type}
               </div>
+            </div>
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label>Route title (optional)</label>
+              <input
+                type="text"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                placeholder="Overrides start → end as the main title"
+                maxLength={120}
+              />
+              <p className="wizard-desc" style={{ margin: '0.35rem 0 0', fontSize: '0.8125rem' }}>
+                If set, this becomes the route title and the start/end names show as a subtitle.
+              </p>
             </div>
           </div>
         )}

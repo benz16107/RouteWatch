@@ -52,6 +52,9 @@ app.get('/api/jobs/:id', (req, res) => {
 app.post('/api/jobs', (req, res) => {
   try {
     const {
+      name,
+      start_name,
+      end_name,
       start_location,
       end_location,
       start_time,
@@ -70,11 +73,17 @@ app.post('/api/jobs', (req, res) => {
 
     const id = uuidv4();
     const db = getDb();
+    const jobName = name != null && String(name).trim() !== '' ? String(name).trim() : null;
+    const startName = start_name != null && String(start_name).trim() !== '' ? String(start_name).trim() : null;
+    const endName = end_name != null && String(end_name).trim() !== '' ? String(end_name).trim() : null;
     db.prepare(`
-      INSERT INTO collection_jobs (id, start_location, end_location, start_time, end_time, cycle_minutes, cycle_seconds, duration_days, navigation_type, avoid_highways, avoid_tolls, additional_routes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO collection_jobs (id, name, start_name, end_name, start_location, end_location, start_time, end_time, cycle_minutes, cycle_seconds, duration_days, navigation_type, avoid_highways, avoid_tolls, additional_routes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
+      jobName,
+      startName,
+      endName,
       start_location,
       end_location,
       start_time || null,
@@ -103,13 +112,19 @@ app.patch('/api/jobs/:id', (req, res) => {
     if (!job) return res.status(404).json({ error: 'Job not found' });
     if (job.status === 'running') return res.status(400).json({ error: 'Cannot edit running job' });
 
-    const allowed = ['start_location', 'end_location', 'start_time', 'end_time', 'cycle_minutes', 'cycle_seconds', 'duration_days', 'navigation_type', 'avoid_highways', 'avoid_tolls'];
+    const allowed = ['name', 'start_name', 'end_name', 'start_location', 'end_location', 'start_time', 'end_time', 'cycle_minutes', 'cycle_seconds', 'duration_days', 'navigation_type', 'avoid_highways', 'avoid_tolls'];
     const updates = [];
     const values = [];
+    const strOrNull = (v) => (v === '' || v == null ? null : String(v));
     for (const k of allowed) {
       if (req.body[k] !== undefined) {
         updates.push(`${k} = ?`);
-        values.push(typeof req.body[k] === 'boolean' ? (req.body[k] ? 1 : 0) : req.body[k]);
+        const v = req.body[k];
+        if (k === 'name' || k === 'start_name' || k === 'end_name') {
+          values.push(strOrNull(typeof v === 'string' ? v.trim() : v));
+        } else {
+          values.push(typeof v === 'boolean' ? (v ? 1 : 0) : v);
+        }
       }
     }
     if (updates.length) {

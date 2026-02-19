@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { fetchJson } from '../utils/api.js'
-import { shortenToStreet } from '../utils/formatAddress.js'
+import { formatJobMetaShort, getJobTitle, getJobSubtitle } from '../utils/formatJob.js'
 
 const API = '/api'
 
@@ -23,11 +23,6 @@ export default function Dashboard({ onSelectRoute, onNewRoute, onViewAllRoutes }
     const t = setInterval(load, 5000)
     return () => clearInterval(t)
   }, [])
-
-  const totalSnapshots = jobs.reduce((sum, j) => {
-    // We'd need snapshot count per job - approximate from job data if available
-    return sum
-  }, 0)
 
   const recentJobs = jobs.slice(0, 6)
   const runningCount = jobs.filter(j => j.status === 'running').length
@@ -70,7 +65,7 @@ export default function Dashboard({ onSelectRoute, onNewRoute, onViewAllRoutes }
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h2 style={{ margin: 0 }}>{jobs.length === 0 ? 'Get started' : 'Your routes'}</h2>
           {jobs.length > 6 && onViewAllRoutes && (
-            <button type="button" className="btn btn-ghost" onClick={onViewAllRoutes}>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={onViewAllRoutes}>
               View all {jobs.length} →
             </button>
           )}
@@ -100,14 +95,15 @@ export default function Dashboard({ onSelectRoute, onNewRoute, onViewAllRoutes }
                 onClick={() => onSelectRoute(job.id)}
               >
                 <div className="route-tile-route">
-                  {shortenToStreet(job.start_location)}
-                  <span className="route-tile-arrow">→</span>
-                  {shortenToStreet(job.end_location)}
+                  {getJobTitle(job)}
                 </div>
+                {getJobSubtitle(job) && (
+                  <div className="route-tile-subtitle">{getJobSubtitle(job)}</div>
+                )}
                 <div className="route-tile-meta">
                   <span className={`route-tile-status status-${job.status}`}>{job.status}</span>
                   <span className="route-tile-detail">
-                    {(job.cycle_seconds ?? 0) > 0 ? `${job.cycle_seconds}s` : `${job.cycle_minutes ?? 60}m`} · {job.navigation_type}
+                    {formatJobMetaShort(job)}
                   </span>
                 </div>
               </div>

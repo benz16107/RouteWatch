@@ -26,6 +26,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const [countdown, setCountdown] = useState(null)
   const [showActions, setShowActions] = useState(false)
   const [chartRange, setChartRange] = useState('24h')
+  const [chartSegment, setChartSegment] = useState('1h')
 
   const fetchData = async () => {
     try {
@@ -166,6 +167,27 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
       : formatTime(d.time),
   }))
 
+  const SEGMENT_MS = { '15m': 15 * 60 * 1000, '1h': 60 * 60 * 1000, '2h': 2 * 60 * 60 * 1000, '6h': 6 * 60 * 60 * 1000, '12h': 12 * 60 * 60 * 1000, '1d': 24 * 60 * 60 * 1000 }
+  const chartSegmentMs = SEGMENT_MS[chartSegment] ?? SEGMENT_MS['1h']
+  const chartMinTs = chartData.length > 0 ? chartData[0].ts : now
+  const chartMaxTs = chartData.length > 0 ? chartData[chartData.length - 1].ts : now
+  const xAxisTicks = (() => {
+    if (chartData.length === 0) return []
+    const ticks = []
+    let t = Math.floor(chartMinTs / chartSegmentMs) * chartSegmentMs
+    while (t <= chartMaxTs + 1) {
+      ticks.push(t)
+      t += chartSegmentMs
+    }
+    const maxTicks = 12
+    if (ticks.length <= maxTicks) return ticks
+    const step = (ticks.length - 1) / (maxTicks - 1)
+    return Array.from({ length: maxTicks }, (_, i) => ticks[Math.round(i * step)])
+  })()
+  const formatXTick = (ts) => activeRange.timeOnly
+    ? new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    : formatTime(new Date(ts).toISOString())
+
   const latestSnap = primarySnapshots[primarySnapshots.length - 1]
 
   const ActionBtn = ({ onClick, children, variant = 'secondary', disabled }) => (
@@ -293,37 +315,67 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
         </div>
       </div>
 
-      {/* Chart */}
-      {(chartData.length > 0 || primarySnapshots.length > 0) && (
+      {/* Chart - only when there is data to plot */}
+      {primarySnapshots.length > 0 && (
         <div className="job-detail-card">
           <div className="job-chart-header">
             <h4 className="job-detail-card-title">Travel time (min)</h4>
-            <div className="job-chart-range">
-              {CHART_RANGES.map(r => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className={`btn btn-sm ${chartRange === r.id ? 'btn-primary' : 'btn-ghost'}`}
-                  onClick={() => setChartRange(r.id)}
-                >
-                  {r.label}
-                </button>
-              ))}
+            <div className="job-chart-controls">
+              <div className="job-chart-range">
+                <span className="job-chart-control-label">Range:</span>
+                {CHART_RANGES.map(r => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className={`btn btn-sm ${chartRange === r.id ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setChartRange(r.id)}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              {chartData.length > 0 && (
+                <div className="job-chart-range">
+                  <span className="job-chart-control-label">Tick:</span>
+                  {Object.keys(SEGMENT_MS).map(seg => (
+                    <button
+                      key={seg}
+                      type="button"
+                      className={`btn btn-sm ${chartSegment === seg ? 'btn-primary' : 'btn-ghost'}`}
+                      onClick={() => setChartSegment(seg)}
+                    >
+                      {seg}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-          <div className="job-chart-wrap">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }} key={chartRange}>
-                <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
-                <XAxis dataKey="formatted" stroke="var(--text-muted)" tick={{ fontSize: 9 }} />
-                <YAxis stroke="var(--text-muted)" tick={{ fontSize: 9 }} width={28} />
-                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }} />
-                <Line type="monotone" dataKey="duration" name="min" stroke="var(--accent)" dot={false} connectNulls strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          {chartData.length === 0 && (
-            <p className="job-empty-msg">No data in this range. Try &quot;All&quot; or a longer range.</p>
+          {chartData.length > 0 ? (
+            <div className="job-chart-wrap">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }} key={`${chartRange}-${chartSegment}`}>
+                  <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                  <XAxis
+                    type="number"
+                    dataKey="ts"
+                    domain={[chartMinTs, chartMaxTs]}
+                    ticks={xAxisTicks}
+                    tickFormatter={formatXTick}
+                    stroke="var(--text-muted)"
+                    tick={{ fontSize: 9 }}
+                  />
+                  <YAxis stroke="var(--text-muted)" tick={{ fontSize: 9 }} width={28} />
+                  <Tooltip
+                    contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }}
+                    labelFormatter={(ts) => formatXTick(ts)}
+                  />
+                  <Line type="monotone" dataKey="duration" name="min" stroke="var(--accent)" dot={false} connectNulls strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="job-empty-msg">No data in this range. Try another range or &quot;All&quot;.</p>
           )}
         </div>
       )}

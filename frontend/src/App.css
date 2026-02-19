@@ -1269,7 +1269,7 @@ body {
 .job-chart-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
@@ -1279,9 +1279,24 @@ body {
   margin: 0;
 }
 
+.job-chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+.job-chart-control-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+
 .job-chart-range {
   display: flex;
+  align-items: center;
   gap: 0.25rem;
+  flex-wrap: wrap;
 }
 
 .job-chart-range .btn {

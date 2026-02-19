@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   ReferenceDot,
+  ReferenceArea,
 } from 'recharts'
 import RouteMap from './RouteMap'
 import EditJob from './EditJob'
@@ -18,6 +19,7 @@ import { formatJobMetaShort, getJobTitle, getJobSubtitle } from '../utils/format
 
 const API = '/api'
 const HOUR_MS = 60 * 60 * 1000
+const DAY_MS = 24 * HOUR_MS
 const CHART_RANGES = [
   { id: '24h', label: '24 hours', ms: 24 * HOUR_MS, timeOnly: true },
   { id: '7d', label: '7 days', ms: 7 * 24 * HOUR_MS, timeOnly: false },
@@ -43,7 +45,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const [countdown, setCountdown] = useState(null)
   const [chartRange, setChartRange] = useState('24h')
   const [showAverageLine, setShowAverageLine] = useState(true)
-  const [showMinMaxLines, setShowMinMaxLines] = useState(true)
+  const [minMaxMode, setMinMaxMode] = useState('perDay') // 'off' | 'range' | 'perDay'
   const chartScrollRef = useRef(null)
   const [chartTooltip, setChartTooltip] = useState({ point: null, x: 0, y: 0 })
   const chartTooltipRafRef = useRef(null)
@@ -198,7 +200,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
         let t = d.getTime()
         while (t <= maxTs + 1) {
           ticks.push(t)
-          t += 12 * HOUR_MS
+          t += 6 * HOUR_MS
         }
       } else {
         const start = Math.floor(minTs / HOUR_MS) * HOUR_MS
@@ -242,6 +244,32 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
     maxPoints,
   } = chartState
 
+  const perDayMinMaxPoints = useMemo(() => {
+    const getDayStart = (ts) => {
+      const d = new Date(ts)
+      d.setHours(0, 0, 0, 0)
+      return d.getTime()
+    }
+    const byDay = new Map()
+    for (const p of scatterData) {
+      const day = getDayStart(p.ts)
+      if (!byDay.has(day)) byDay.set(day, [])
+      byDay.get(day).push(p)
+    }
+    let minPts = []
+    let maxPts = []
+    byDay.forEach((pts) => {
+      const mins = pts.filter((p) => p.duration === Math.min(...pts.map((x) => x.duration)))
+      const maxs = pts.filter((p) => p.duration === Math.max(...pts.map((x) => x.duration)))
+      minPts = minPts.concat(mins)
+      maxPts = maxPts.concat(maxs)
+    })
+    return { minPoints: minPts, maxPoints: maxPts }
+  }, [scatterData])
+
+  const displayMinPoints = minMaxMode === 'range' ? minPoints : minMaxMode === 'perDay' ? perDayMinMaxPoints.minPoints : []
+  const displayMaxPoints = minMaxMode === 'range' ? maxPoints : minMaxMode === 'perDay' ? perDayMinMaxPoints.maxPoints : []
+
   const formatXTick = useCallback(
     (ts) =>
       activeRange.timeOnly
@@ -254,12 +282,37 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
       if (chartRange === '7d') {
         const d = new Date(ts)
         const day = d.toLocaleDateString(undefined, { weekday: 'short' })
-        return d.getHours() === 0 ? `${day} 12 AM` : `${day} 12 PM`
+        const time = d.toLocaleTimeString(undefined, { hour: 'numeric' })
+        return `${day} ${time}`
       }
       return new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric' })
     },
     [chartRange]
   )
+
+  const dayBands = useMemo(() => {
+    const bands = []
+    const d = new Date(chartMinTs)
+    d.setHours(0, 0, 0, 0)
+    let dayStart = d.getTime()
+    if (dayStart > chartMinTs) dayStart -= DAY_MS
+    let i = 0
+    while (dayStart < chartMaxTs) {
+      const dayEnd = dayStart + DAY_MS
+      const x1 = Math.max(dayStart, chartMinTs)
+      const x2 = Math.min(dayEnd, chartMaxTs)
+      if (x2 > x1) {
+        bands.push({
+          x1,
+          x2,
+          fill: i % 2 === 0 ? 'var(--chart-day-band-even, rgba(0,0,0,0.06))' : 'var(--chart-day-band-odd, rgba(0,0,0,0.14))',
+        })
+      }
+      dayStart = dayEnd
+      i += 1
+    }
+    return bands
+  }, [chartMinTs, chartMaxTs])
 
   const handleChartMouseMove = useCallback(
     (e) => {
@@ -454,14 +507,32 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                     />
                     <span>Show average</span>
                   </label>
-                  <label className="job-chart-toggle">
-                    <input
-                      type="checkbox"
-                      checked={showMinMaxLines}
-                      onChange={(e) => setShowMinMaxLines(e.target.checked)}
-                    />
-                    <span>Show lowest & highest</span>
-                  </label>
+                  <div className="job-chart-segmented" role="group" aria-label="Low/high display">
+                    <button
+                      type="button"
+                      className={`job-chart-segmented-option ${minMaxMode === 'range' ? 'active' : ''}`}
+                      onClick={() => setMinMaxMode('range')}
+                      title="Show lowest and highest for the whole selected range"
+                    >
+                      Whole range
+                    </button>
+                    <button
+                      type="button"
+                      className={`job-chart-segmented-option ${minMaxMode === 'off' ? 'active' : ''}`}
+                      onClick={() => setMinMaxMode('off')}
+                      title="Hide lowest and highest"
+                    >
+                      Off
+                    </button>
+                    <button
+                      type="button"
+                      className={`job-chart-segmented-option ${minMaxMode === 'perDay' ? 'active' : ''}`}
+                      onClick={() => setMinMaxMode('perDay')}
+                      title="Show lowest and highest for each 24-hour day"
+                    >
+                      Per day
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -482,6 +553,9 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                         margin={{ top: 4, right: CHART_MARGIN_RIGHT, left: 0, bottom: 4 }}
                         key={chartRange}
                       >
+                        {dayBands.map((band, i) => (
+                          <ReferenceArea key={`day-${i}`} x1={band.x1} x2={band.x2} fill={band.fill} />
+                        ))}
                         <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
                         <XAxis
                           type="number"
@@ -520,7 +594,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                             strokeWidth={1.5}
                           />
                         )}
-                        {showMinMaxLines && minPoints.map((pt, i) => (
+                        {displayMinPoints.map((pt, i) => (
                           <ReferenceDot
                             key={`min-${pt.ts}-${i}`}
                             x={pt.ts}
@@ -531,7 +605,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                             strokeWidth={2}
                           />
                         ))}
-                        {showMinMaxLines && maxPoints.map((pt, i) => (
+                        {displayMaxPoints.map((pt, i) => (
                           <ReferenceDot
                             key={`max-${pt.ts}-${i}`}
                             x={pt.ts}
@@ -566,28 +640,44 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                   </div>
                 )}
               </div>
-              {(minDurationInRange != null || maxDurationInRange != null || averageDuration != null) && (
+              {(minDurationInRange != null || maxDurationInRange != null || averageDuration != null || displayMinPoints.length > 0 || displayMaxPoints.length > 0) && (
                 <div className="job-chart-side-labels">
-                  {minDurationInRange != null && minPoints.length > 0 && (
+                  {minMaxMode !== 'off' && displayMinPoints.length > 0 && (
                     <div className="job-chart-side-item job-chart-side-low">
-                      <span className="job-chart-side-label">Low</span>
+                      <span className="job-chart-side-label">{minMaxMode === 'perDay' ? 'Low (per day)' : 'Low'}</span>
                       <span className="job-chart-side-time">
-                        {minPoints.length === 1
-                          ? formatXTick(minPoints[0].ts)
-                          : `${minPoints.length} times`}
+                        {displayMinPoints.length === 1
+                          ? formatXTick(displayMinPoints[0].ts)
+                          : minMaxMode === 'perDay'
+                            ? `${displayMinPoints.length} points`
+                            : `${displayMinPoints.length} times`}
                       </span>
-                      <span className="job-chart-side-value">{minDurationInRange.toFixed(1)} min</span>
+                      <span className="job-chart-side-value">
+                        {minMaxMode === 'perDay' && displayMinPoints.length > 0
+                          ? `${Math.min(...displayMinPoints.map((p) => p.duration)).toFixed(1)} min`
+                          : minDurationInRange != null
+                            ? `${minDurationInRange.toFixed(1)} min`
+                            : ''}
+                      </span>
                     </div>
                   )}
-                  {maxDurationInRange != null && maxPoints.length > 0 && (
+                  {minMaxMode !== 'off' && displayMaxPoints.length > 0 && (
                     <div className="job-chart-side-item job-chart-side-high">
-                      <span className="job-chart-side-label">High</span>
+                      <span className="job-chart-side-label">{minMaxMode === 'perDay' ? 'High (per day)' : 'High'}</span>
                       <span className="job-chart-side-time">
-                        {maxPoints.length === 1
-                          ? formatXTick(maxPoints[0].ts)
-                          : `${maxPoints.length} times`}
+                        {displayMaxPoints.length === 1
+                          ? formatXTick(displayMaxPoints[0].ts)
+                          : minMaxMode === 'perDay'
+                            ? `${displayMaxPoints.length} points`
+                            : `${displayMaxPoints.length} times`}
                       </span>
-                      <span className="job-chart-side-value">{maxDurationInRange.toFixed(1)} min</span>
+                      <span className="job-chart-side-value">
+                        {minMaxMode === 'perDay' && displayMaxPoints.length > 0
+                          ? `${Math.max(...displayMaxPoints.map((p) => p.duration)).toFixed(1)} min`
+                          : maxDurationInRange != null
+                            ? `${maxDurationInRange.toFixed(1)} min`
+                            : ''}
+                      </span>
                     </div>
                   )}
                   {averageDuration != null && (

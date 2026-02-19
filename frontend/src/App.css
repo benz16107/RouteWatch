@@ -33,6 +33,8 @@
   --shadow-md: 0 4px 12px rgba(26, 25, 21, 0.08);
   --shadow-lg: 0 12px 32px rgba(26, 25, 21, 0.1);
   --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-day-band-even: rgba(0, 0, 0, 0.06);
+  --chart-day-band-odd: rgba(0, 0, 0, 0.14);
 }
 
 [data-theme="dark"] {
@@ -43,6 +45,8 @@
   --surface-active: #212d3d;
   --border: #2d3a4d;
   --border-subtle: #1e2a38;
+  --chart-day-band-even: rgba(255, 255, 255, 0.06);
+  --chart-day-band-odd: rgba(255, 255, 255, 0.14);
   --text: #f2f4f8;
   --text-secondary: #abb2bf;
   --text-muted: #6b7280;
@@ -1350,6 +1354,42 @@ body {
   align-items: center;
   gap: 0.25rem;
   flex-wrap: wrap;
+}
+
+.job-chart-segmented {
+  display: flex;
+  background: var(--surface-hover);
+  padding: 0.2rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.job-chart-segmented-option {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: color var(--transition), background var(--transition);
+}
+
+.job-chart-segmented-option:hover {
+  color: var(--text-secondary);
+  background: var(--surface-active);
+}
+
+.job-chart-segmented-option.active {
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.job-chart-segmented-option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-muted);
 }
 
 .job-chart-toggle {

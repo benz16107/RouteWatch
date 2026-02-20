@@ -32,7 +32,7 @@ export default function Sidebar({ view, onNavigate }) {
           <span>New route</span>
         </button>
       </nav>
-      <div className="sidebar-footer">
+      <div className="sidebar-theme">
         <div className="theme-toggle" role="group" aria-label="Theme">
           <button
             type="button"
@@ -52,6 +52,7 @@ export default function Sidebar({ view, onNavigate }) {
           </button>
         </div>
       </div>
+      <div className="sidebar-footer" aria-hidden="true" />
     </aside>
   )
 }

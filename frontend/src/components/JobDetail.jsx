@@ -46,6 +46,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const [chartRange, setChartRange] = useState('24h')
   const [showAverageLine, setShowAverageLine] = useState(true)
   const [minMaxMode, setMinMaxMode] = useState('perDay') // 'off' | 'range' | 'perDay'
+  const [showAllSnapshots, setShowAllSnapshots] = useState(false)
   const chartScrollRef = useRef(null)
   const [chartTooltip, setChartTooltip] = useState({ point: null, x: 0, y: 0 })
   const chartTooltipRafRef = useRef(null)
@@ -713,7 +714,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                 </tr>
               </thead>
               <tbody>
-                {primarySnapshots.slice(-40).reverse().map(s => {
+                {(showAllSnapshots ? primarySnapshots.slice() : primarySnapshots.slice(-40)).reverse().map(s => {
                   const isMin = s.id === minSnapshotId
                   const isMax = s.id === maxSnapshotId
                   return (
@@ -744,7 +745,15 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
               </tbody>
             </table>
             {primarySnapshots.length > 40 && (
-              <p className="job-table-footer">Last 40 of {primarySnapshots.length}</p>
+              <div className="job-table-footer">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowAllSnapshots(prev => !prev)}
+                >
+                  {showAllSnapshots ? 'Show last 40' : `Show all (${primarySnapshots.length})`}
+                </button>
+              </div>
             )}
           </div>
         )}

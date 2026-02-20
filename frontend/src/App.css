@@ -176,6 +176,10 @@ body {
   opacity: 0.9;
 }
 
+.sidebar-theme {
+  padding: 0 0.75rem 1rem;
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding: 1rem 0.75rem;

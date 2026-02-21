@@ -571,7 +571,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                     className="job-chart-inner"
                     style={{ width: chartInnerWidth ?? '100%', minWidth: '100%' }}
                   >
-                    <ResponsiveContainer width={chartInnerWidth ?? '100%'} height={180}>
+                    <ResponsiveContainer width={chartInnerWidth ?? '100%'} height={200}>
                       <ScatterChart
                         data={scatterData}
                         margin={{ top: 4, right: CHART_MARGIN_RIGHT, left: 0, bottom: 4 }}

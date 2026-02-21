@@ -154,10 +154,18 @@ app.get('/api/auth/google', (req, res) => {
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
 
+// Where to send the user after OAuth: prefer FRONTEND_URL; in local dev (backend on 3001) always use Vite on 5173
+function getFrontendUrl(req) {
+  if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL;
+  const host = (req.get('host') || '').toLowerCase();
+  if (host.endsWith(':3001')) return 'http://localhost:5173';
+  return `${req.protocol}://${req.get('host')}`;
+}
+
 // Google OAuth: callback – exchange code for tokens, fetch user, set session, redirect to app
 app.get('/api/auth/google/callback', async (req, res) => {
   const { code, state: signedState } = req.query;
-  const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
+  const frontendUrl = getFrontendUrl(req);
   if (!code || !signedState || !verifyState(signedState)) {
     return res.redirect(`${frontendUrl}?auth_error=invalid_callback`);
   }

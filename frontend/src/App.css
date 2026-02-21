@@ -349,8 +349,15 @@ body {
   color: var(--text-muted);
 }
 
-.header-link-logout:hover {
+.header-link-logout:hover,
+.header-logout-btn:hover {
   color: var(--text);
+}
+
+.header-logout-btn {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  padding: 0.35rem 0.6rem;
 }
 
 .header-user-email {

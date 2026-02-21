@@ -37,12 +37,12 @@ export default function LoginPage() {
     <div className="auth-page">
       <div className="auth-card card">
         <h1 className="auth-title">RouteWatch</h1>
-        <p className="auth-subtitle">Sign in to continue</p>
+        <p className="auth-subtitle">Log in to access your routes</p>
         {error && <p className="auth-error" role="alert">{error}</p>}
         {showGoogle && (
           <a href={googleSignInUrl} className="btn btn-google auth-google-btn">
             <span className="auth-google-icon" aria-hidden>G</span>
-            Sign in with Google
+            Log in with Google
           </a>
         )}
         {showPassword && (
@@ -63,7 +63,7 @@ export default function LoginPage() {
                 disabled={submitting}
               />
               <button type="submit" className="btn btn-primary auth-submit" disabled={submitting}>
-                {submitting ? 'Signing in…' : 'Sign in with password'}
+                {submitting ? 'Logging in…' : 'Log in with password'}
               </button>
             </form>
           </>

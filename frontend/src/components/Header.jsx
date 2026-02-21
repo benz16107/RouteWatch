@@ -43,8 +43,8 @@ export default function Header({ view, onNavigate }) {
                   {user.email}
                 </span>
               )}
-              <button type="button" className="header-link header-link-logout" onClick={logout}>
-                Sign out
+              <button type="button" className="btn btn-sm btn-ghost header-logout-btn" onClick={logout} title="Log out">
+                Log out
               </button>
             </>
           )}

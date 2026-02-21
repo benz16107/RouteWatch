@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import session from 'express-session';
+import cookieSession from 'cookie-session';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import { fileURLToPath } from 'url';
@@ -24,17 +24,14 @@ const authEnabled = authPassword.length > 0 || googleClientId.length > 0;
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
-app.use(session({
-  secret: process.env.AUTH_SECRET || process.env.AUTH_PASSWORD || 'routewatch-session-secret',
-  resave: false,
-  saveUninitialized: false,
+// Cookie-based session so login persists across multiple app instances (e.g. DigitalOcean)
+app.use(cookieSession({
   name: 'routewatch.sid',
-  cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  },
+  keys: [process.env.AUTH_SECRET || process.env.AUTH_PASSWORD || 'routewatch-session-secret'],
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
 }));
 
 // Log and normalize 500 errors
@@ -109,7 +106,7 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  req.session.destroy(() => {});
+  req.session = null;
   res.json({ ok: true });
 });
 

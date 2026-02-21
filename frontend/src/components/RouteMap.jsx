@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { fetchJson } from '../utils/api.js'
+import { useTheme } from '../context/ThemeContext.jsx'
 
 const API = '/api'
 
@@ -17,10 +18,23 @@ function FitBounds({ points }) {
   return null
 }
 
+const OSM_TILES = {
+  url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+}
+const DARK_TILES = {
+  url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+}
+
 export default function RouteMap({ origin, destination, travelMode = 'driving', avoidHighways, avoidTolls, lastSnapshotAt }) {
+  const { theme } = useTheme()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const isDark = theme === 'dark'
+  const tiles = isDark ? DARK_TILES : OSM_TILES
+  const routeColor = isDark ? '#7dd3fc' : '#58a6ff'
 
   useEffect(() => {
     if (!origin || !destination) {
@@ -87,13 +101,10 @@ export default function RouteMap({ origin, destination, travelMode = 'driving', 
         style={{ height: '180px', width: '100%', borderRadius: '8px' }}
         scrollWheelZoom={true}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <TileLayer attribution={tiles.attribution} url={tiles.url} />
         <Polyline
           positions={points.map(([lat, lng]) => [lat, lng])}
-          color="#58a6ff"
+          color={routeColor}
           weight={4}
           opacity={0.8}
         />

@@ -393,41 +393,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   }
 
   return (
-    <div className="job-detail-page">
-      <div className="job-detail-header">
-        <button className="btn btn-ghost btn-sm" onClick={onBack}>← Back</button>
-        <div className="job-detail-title">
-          <div className="job-route-line">
-            <span className="job-route-text">
-              {getJobTitle(job)}
-            </span>
-            <span className={`status-badge status-${job.status}`}>{job.status}</span>
-          </div>
-          {getJobSubtitle(job) && (
-            <div className="job-detail-subtitle">{getJobSubtitle(job)}</div>
-          )}
-          <div className="job-meta-line">
-            <span className="job-meta-text">{formatJobMetaShort(job)}</span>
-            <div className="job-detail-actions">
-              {String(job.status).toLowerCase() === 'running' && (
-                <ActionBtn variant="warning" onClick={() => runAction('pause')} disabled={!!actionLoading}>{actionLoading === 'pause' ? '…' : 'Pause'}</ActionBtn>
-              )}
-              {String(job.status).toLowerCase() === 'paused' && (
-                <ActionBtn variant="success" onClick={() => runAction('resume')} disabled={!!actionLoading}>{actionLoading === 'resume' ? '…' : 'Resume'}</ActionBtn>
-              )}
-              {String(job.status).toLowerCase() !== 'running' && String(job.status).toLowerCase() !== 'paused' && (
-                <ActionBtn variant="success" onClick={() => runAction('start')} disabled={!!actionLoading}>{actionLoading === 'start' ? '…' : 'Start'}</ActionBtn>
-              )}
-              <ActionBtn onClick={() => setEditing(true)}>Edit</ActionBtn>
-              <ActionBtn onClick={handleCreateFlippedJob} disabled={!!actionLoading}>Reverse route</ActionBtn>
-              <ActionBtn onClick={() => handleExport('json')}>Export JSON</ActionBtn>
-              <ActionBtn onClick={() => handleExport('csv')}>Export CSV</ActionBtn>
-              <ActionBtn variant="danger" onClick={handleDelete} disabled={!!actionLoading}>{actionLoading === 'delete' ? 'Deleting…' : 'Delete'}</ActionBtn>
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <div className="route-page">
       {editing && (
         <EditJob
           job={job}
@@ -441,53 +407,42 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
         />
       )}
 
-      {/* Stats row + map side by side */}
-      <div className="job-detail-main">
-        <div className="job-detail-stats">
-          <div className="job-stat-grid">
-            <div className="job-stat-cell">
-              <span className="job-stat-label">Current</span>
-              <span className="job-stat-value">
-                {latestSnap?.duration_seconds ? `${Math.round(latestSnap.duration_seconds / 60)} min` : '—'}
-              </span>
-              {latestSnap?.distance_meters && (
-                <span className="job-stat-sub">{(latestSnap.distance_meters / 1000).toFixed(1)} km</span>
-              )}
-            </div>
-            <div className="job-stat-cell">
-              <span className="job-stat-label">Total snapshots</span>
-              <span className="job-stat-value">{primarySnapshots.length}</span>
-            </div>
-            <div className="job-stat-cell">
-              <span className="job-stat-label">All time low</span>
-              <span className="job-stat-value job-stat-success">
-                {minDuration != null ? `${Math.round(minDuration / 60)} min` : '—'}
-              </span>
-            </div>
-            <div className="job-stat-cell">
-              <span className="job-stat-label">All time high</span>
-              <span className="job-stat-value job-stat-warning">
-                {maxDuration != null ? `${Math.round(maxDuration / 60)} min` : '—'}
-              </span>
-            </div>
-            <div className="job-stat-cell">
-              <span className="job-stat-label">Total average</span>
-              <span className="job-stat-value">
-                {totalAvgDuration != null ? `${Math.round(totalAvgDuration / 60)} min` : '—'}
-              </span>
-            </div>
-            {job.status === 'running' && countdown != null && (
-              <div className="job-stat-cell">
-                <span className="job-stat-label">Next in</span>
-                <span className="job-stat-value job-stat-accent">{countdown}s</span>
-              </div>
+      {/* Toolbar: back, title, status, actions */}
+      <header className="route-toolbar">
+        <div className="route-toolbar-left">
+          <button type="button" className="route-back" onClick={onBack} aria-label="Back to routes">
+            ← Back
+          </button>
+          <div className="route-heading">
+            <h1 className="route-title">{getJobTitle(job)}</h1>
+            {getJobSubtitle(job) && (
+              <p className="route-subtitle">{getJobSubtitle(job)}</p>
             )}
+            <p className="route-meta">{formatJobMetaShort(job)}</p>
           </div>
-          {snapshots.length === 0 && (
-            <p className="job-empty-msg">{job.status === 'running' ? 'Collecting first data...' : 'No data yet. Start the job.'}</p>
-          )}
+          <span className={`route-status status-badge status-${job.status}`}>{job.status}</span>
         </div>
-        <div className="job-detail-map">
+        <div className="route-toolbar-actions">
+          {String(job.status).toLowerCase() === 'running' && (
+            <ActionBtn variant="warning" onClick={() => runAction('pause')} disabled={!!actionLoading}>{actionLoading === 'pause' ? '…' : 'Pause'}</ActionBtn>
+          )}
+          {String(job.status).toLowerCase() === 'paused' && (
+            <ActionBtn variant="success" onClick={() => runAction('resume')} disabled={!!actionLoading}>{actionLoading === 'resume' ? '…' : 'Resume'}</ActionBtn>
+          )}
+          {String(job.status).toLowerCase() !== 'running' && String(job.status).toLowerCase() !== 'paused' && (
+            <ActionBtn variant="success" onClick={() => runAction('start')} disabled={!!actionLoading}>{actionLoading === 'start' ? '…' : 'Start'}</ActionBtn>
+          )}
+          <ActionBtn onClick={() => setEditing(true)}>Edit</ActionBtn>
+          <ActionBtn onClick={handleCreateFlippedJob} disabled={!!actionLoading}>Reverse</ActionBtn>
+          <ActionBtn onClick={() => handleExport('json')}>JSON</ActionBtn>
+          <ActionBtn onClick={() => handleExport('csv')}>CSV</ActionBtn>
+          <ActionBtn variant="danger" onClick={handleDelete} disabled={!!actionLoading}>{actionLoading === 'delete' ? '…' : 'Delete'}</ActionBtn>
+        </div>
+      </header>
+
+      {/* Hero: full-width map with live overlay */}
+      <section className="route-hero">
+        <div className="route-hero-map">
           <RouteMap
             origin={job.start_location}
             destination={job.end_location}
@@ -497,13 +452,62 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
             lastSnapshotAt={snapshots.length ? snapshots[snapshots.length - 1].collected_at : null}
           />
         </div>
-      </div>
+        <div className="route-hero-live">
+          <div className="route-hero-live-item">
+            <span className="route-hero-live-label">Latest</span>
+            <span className="route-hero-live-value">
+              {latestSnap?.duration_seconds ? `${Math.round(latestSnap.duration_seconds / 60)} min` : '—'}
+            </span>
+            {latestSnap?.distance_meters && (
+              <span className="route-hero-live-sub">{(latestSnap.distance_meters / 1000).toFixed(1)} km</span>
+            )}
+          </div>
+          {job.status === 'running' && countdown != null && (
+            <div className="route-hero-live-item route-hero-live-next">
+              <span className="route-hero-live-label">Next in</span>
+              <span className="route-hero-live-value">{countdown}s</span>
+            </div>
+          )}
+        </div>
+      </section>
 
-      {/* Chart - only when there is data to plot */}
+      {snapshots.length === 0 && (
+        <p className="route-empty-msg">{job.status === 'running' ? 'Collecting first data…' : 'No data yet. Start the job to collect travel times.'}</p>
+      )}
+
+      {/* Metrics strip */}
+      {(primarySnapshots.length > 0 || minDuration != null || totalAvgDuration != null) && (
+        <section className="route-metrics">
+          <div className="route-metric">
+            <span className="route-metric-label">Snapshots</span>
+            <span className="route-metric-value">{primarySnapshots.length}</span>
+          </div>
+          <div className="route-metric">
+            <span className="route-metric-label">All-time low</span>
+            <span className="route-metric-value route-metric-value--success">
+              {minDuration != null ? `${Math.round(minDuration / 60)} min` : '—'}
+            </span>
+          </div>
+          <div className="route-metric">
+            <span className="route-metric-label">All-time high</span>
+            <span className="route-metric-value route-metric-value--warning">
+              {maxDuration != null ? `${Math.round(maxDuration / 60)} min` : '—'}
+            </span>
+          </div>
+          <div className="route-metric">
+            <span className="route-metric-label">Average</span>
+            <span className="route-metric-value">
+              {totalAvgDuration != null ? `${Math.round(totalAvgDuration / 60)} min` : '—'}
+            </span>
+          </div>
+        </section>
+      )}
+
+      {/* Chart */}
       {primarySnapshots.length > 0 && (
-        <div className="job-detail-card">
-          <div className="job-chart-header">
-            <h4 className="job-detail-card-title">Travel time (min)</h4>
+        <section className="route-chart">
+          <div className="route-chart-head">
+            <h2 className="route-section-title">Travel time</h2>
             <div className="job-chart-controls">
               <div className="job-chart-range">
                 <span className="job-chart-control-label">Range:</span>
@@ -714,17 +718,17 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
               )}
             </div>
           ) : (
-            <p className="job-empty-msg">No data in this range. Try another range or &quot;All&quot;.</p>
+            <p className="route-empty-msg">No data in this range. Try another range or &quot;All&quot;.</p>
           )}
-        </div>
+        </section>
       )}
 
       {/* Data table */}
-      <div className="job-detail-card">
-        <h4 className="job-detail-card-title">Collected data</h4>
-        <p className="job-detail-hint">Click a row to view map and directions</p>
+      <section className="route-data">
+        <h2 className="route-section-title">Collected data</h2>
+        <p className="route-data-hint">Click a row to view map and directions</p>
         {snapshots.length === 0 ? (
-          <p className="job-empty-msg">No data yet.</p>
+          <p className="route-empty-msg">No data yet.</p>
         ) : (
           <div className="job-table-wrap">
             <table className="job-table">
@@ -780,7 +784,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
             )}
           </div>
         )}
-      </div>
+      </section>
     </div>
   )
 }

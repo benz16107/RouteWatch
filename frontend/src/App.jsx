@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import Sidebar from './components/Sidebar'
+import Header from './components/Header'
 import Dashboard from './components/Dashboard'
 import JobsList from './components/JobsList'
 import RouteWizard from './components/RouteWizard'
@@ -43,7 +43,7 @@ function AppContent() {
 
   return (
     <>
-      <Sidebar view={view} onNavigate={goTo} />
+      <Header view={view} onNavigate={goTo} />
       <main className="main">
         {view === 'dashboard' && (
           <Dashboard

@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
+import { useAuth } from '../context/AuthContext.jsx'
 import { fetchJson } from '../utils/api.js'
 import { formatJobMetaShort, getJobTitle, getJobSubtitle } from '../utils/formatJob.js'
 
 const API = '/api'
 
 export default function Dashboard({ onSelectRoute, onNewRoute, onViewAllRoutes }) {
+  const { user } = useAuth()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
+  const displayName = user?.name?.trim() || user?.email?.split('@')[0] || 'there'
 
   useEffect(() => {
     const load = async () => {
@@ -40,6 +43,7 @@ export default function Dashboard({ onSelectRoute, onNewRoute, onViewAllRoutes }
   return (
     <div className="dashboard">
       <div className="dashboard-hero">
+        <p className="dashboard-welcome">Hi, {displayName}, welcome to RouteWatch.</p>
         <h1>RouteWatch</h1>
         <p>Track how traffic changes over time. Set a route, choose how often to check, and watch travel times build a history.</p>
         <button className="btn btn-hero" onClick={onNewRoute}>

@@ -53,6 +53,15 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_snapshots_job_collected 
       ON route_snapshots(job_id, collected_at);
     CREATE INDEX IF NOT EXISTS idx_snapshots_job_id ON route_snapshots(job_id);
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT,
+      password_hash TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email);
   `);
 
   try {

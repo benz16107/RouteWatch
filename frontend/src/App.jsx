@@ -4,13 +4,16 @@ import Dashboard from './components/Dashboard'
 import JobsList from './components/JobsList'
 import RouteWizard from './components/RouteWizard'
 import JobDetail from './components/JobDetail'
+import ProfilePage from './components/ProfilePage'
 import LoginPage from './components/LoginPage'
+import SignUpPage from './components/SignUpPage'
 import { useAuth } from './context/AuthContext'
 import './App.css'
 
 function pathToState(pathname) {
   if (pathname === '/routes') return { view: 'routes', selectedJobId: null }
   if (pathname === '/new') return { view: 'new', selectedJobId: null }
+  if (pathname === '/profile') return { view: 'profile', selectedJobId: null }
   const jobMatch = pathname.match(/^\/job\/([^/]+)$/)
   if (jobMatch) return { view: 'detail', selectedJobId: jobMatch[1] }
   return { view: 'dashboard', selectedJobId: null }
@@ -33,7 +36,7 @@ function AppContent() {
   const goTo = (v) => {
     setView(v)
     if (v !== 'detail') setSelectedJobId(null)
-    const path = v === 'dashboard' ? '/' : v === 'routes' ? '/routes' : v === 'new' ? '/new' : ''
+    const path = v === 'dashboard' ? '/' : v === 'routes' ? '/routes' : v === 'new' ? '/new' : v === 'profile' ? '/profile' : ''
     if (path !== '') window.history.pushState({}, '', path)
   }
 
@@ -62,6 +65,9 @@ function AppContent() {
             onCreated={(id) => openRoute(id)}
             onCancel={() => goTo('dashboard')}
           />
+        )}
+        {view === 'profile' && (
+          <ProfilePage onBack={() => goTo('dashboard')} />
         )}
         {view === 'detail' && selectedJobId != null && (
           <JobDetail
@@ -101,6 +107,12 @@ class AppErrorBoundary extends React.Component {
 
 export default function App() {
   const { isAuthenticated, loading } = useAuth()
+  const [authView, setAuthView] = useState(() => (typeof window !== 'undefined' && window.location.pathname === '/signup' ? 'signup' : 'login'))
+  useEffect(() => {
+    const onPop = () => setAuthView(typeof window !== 'undefined' && window.location.pathname === '/signup' ? 'signup' : 'login')
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
   if (loading) {
     return (
       <div className="app auth-loading">
@@ -111,7 +123,7 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <div className="app">
-        <LoginPage />
+        {authView === 'signup' ? <SignUpPage /> : <LoginPage />}
       </div>
     )
   }

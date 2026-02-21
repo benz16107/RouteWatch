@@ -69,15 +69,26 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('auth:unauthorized', onUnauthorized)
   }, [])
 
-  const login = useCallback(async (password) => {
+  const login = useCallback(async (email, password) => {
     const data = await fetchJson(`${API}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ email, password }),
     })
     setIsAuthenticated(true)
     setAuthEnabled(data?.authEnabled ?? true)
-    setUser(null)
+    setUser(data?.user ?? null)
+  }, [])
+
+  const register = useCallback(async (name, email, password) => {
+    const data = await fetchJson(`${API}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    })
+    setIsAuthenticated(true)
+    setAuthEnabled(data?.authEnabled ?? true)
+    setUser(data?.user ?? null)
   }, [])
 
   const logout = useCallback(async () => {
@@ -92,7 +103,7 @@ export function AuthProvider({ children }) {
   const googleSignInUrl = `${import.meta.env.VITE_API_URL || ''}/api/auth/google`
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, authEnabled, authConfig, user, loading, login, logout, checkAuth, googleSignInUrl }}>
+    <AuthContext.Provider value={{ isAuthenticated, authEnabled, authConfig, user, loading, login, register, logout, checkAuth, googleSignInUrl }}>
       {children}
     </AuthContext.Provider>
   )

@@ -11,6 +11,7 @@ import { startJob, stopJob, pauseJob, resumeJob, restoreRunningJobs } from './se
 import { getRoutePolyline, reverseGeocode } from './services/googleMaps.js';
 import { mkdirSync, existsSync } from 'fs';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = join(__dirname, 'data');
@@ -24,7 +25,8 @@ if (isProduction) app.set('trust proxy', 1);
 const authPassword = (process.env.AUTH_PASSWORD || '').trim();
 const googleClientId = (process.env.GOOGLE_OAUTH_CLIENT_ID || '').trim();
 const googleClientSecret = (process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim();
-const authEnabled = authPassword.length > 0 || googleClientId.length > 0;
+// Auth required when: legacy single password, Google OAuth, or user accounts (sign up) are available
+const authEnabled = authPassword.length > 0 || googleClientId.length > 0 || true;
 
 const sessionSecret = process.env.AUTH_SECRET || process.env.AUTH_PASSWORD || 'routewatch-session-secret';
 if (isProduction && authEnabled && sessionSecret === 'routewatch-session-secret') {
@@ -121,7 +123,7 @@ function isAuthenticated(req) {
 
 app.get('/api/auth/config', (req, res) => {
   res.json({
-    passwordAuth: authPassword.length > 0,
+    passwordAuth: true, // email/password sign up & login
     googleAuth: googleClientId.length > 0,
   });
 });
@@ -129,21 +131,78 @@ app.get('/api/auth/config', (req, res) => {
 app.get('/api/auth/me', (req, res) => {
   if (!authEnabled) return res.json({ ok: true, authEnabled: false });
   if (isAuthenticated(req)) {
+    const sessionUser = req.session?.user || null;
+    let hasPassword = false;
+    if (sessionUser?.email) {
+      const row = getDb().prepare('SELECT password_hash FROM users WHERE email = ?').get(sessionUser.email);
+      hasPassword = !!(row && row.password_hash);
+    }
     return res.json({
       ok: true,
       authEnabled: true,
-      user: req.session?.user || null,
+      user: sessionUser ? { ...sessionUser, hasPassword } : null,
     });
   }
   res.status(401).json({ error: 'Not authenticated', authEnabled: true });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
+  const email = (typeof req.body?.email === 'string' ? req.body.email : '').trim().toLowerCase();
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   if (!authEnabled) return res.json({ ok: true, authEnabled: false });
-  if (password !== authPassword) return res.status(401).json({ error: 'Invalid password' });
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  const db = getDb();
+  const userRow = db.prepare('SELECT id, email, name, password_hash FROM users WHERE email = ?').get(email);
+  if (!userRow) {
+    if (authPassword.length > 0 && password === authPassword) {
+      req.session.authenticated = true;
+      return res.json({ ok: true, authEnabled: true });
+    }
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+  const passwordHash = userRow.password_hash;
+  if (!passwordHash) return res.status(401).json({ error: 'This account uses Google sign-in. Use Log in with Google.' });
+  const match = await bcrypt.compare(password, passwordHash);
+  if (!match) return res.status(401).json({ error: 'Invalid email or password' });
   req.session.authenticated = true;
-  res.json({ ok: true, authEnabled: true });
+  req.session.user = { email: userRow.email, name: userRow.name || null, picture: null };
+  res.json({ ok: true, authEnabled: true, user: req.session.user });
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  const name = (typeof req.body?.name === 'string' ? req.body.name : '').trim();
+  const email = (typeof req.body?.email === 'string' ? req.body.email : '').trim().toLowerCase();
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (!authEnabled) return res.status(400).json({ error: 'Registration not available' });
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (existing) return res.status(409).json({ error: 'An account with this email already exists. Log in or use a different email.' });
+  const id = uuidv4();
+  const passwordHash = await bcrypt.hash(password, 10);
+  db.prepare('INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)').run(id, email, name || null, passwordHash);
+  req.session.authenticated = true;
+  req.session.user = { email, name: name || null, picture: null };
+  res.status(201).json({ ok: true, authEnabled: true, user: req.session.user });
+});
+
+app.post('/api/auth/change-password', async (req, res) => {
+  if (!authEnabled) return res.status(400).json({ error: 'Not available' });
+  if (!isAuthenticated(req) || !req.session?.user?.email) return res.status(401).json({ error: 'Not authenticated' });
+  const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+  const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current password and new password required' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  const db = getDb();
+  const email = req.session.user.email;
+  const row = db.prepare('SELECT id, password_hash FROM users WHERE email = ?').get(email);
+  if (!row || !row.password_hash) return res.status(400).json({ error: 'This account uses Google sign-in. Password cannot be changed.' });
+  const match = await bcrypt.compare(currentPassword, row.password_hash);
+  if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(passwordHash, email);
+  res.json({ ok: true });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -237,10 +296,19 @@ app.get('/api/auth/google/callback', async (req, res) => {
     return res.redirect(`${frontendUrl}?auth_error=userinfo`);
   }
   const user = await userRes.json();
+  const email = (user.email || '').trim().toLowerCase();
+  if (!email) return res.redirect(`${frontendUrl}?auth_error=userinfo`);
+  const db = getDb();
+  let userRow = db.prepare('SELECT id, email, name FROM users WHERE email = ?').get(email);
+  if (!userRow) {
+    const id = uuidv4();
+    db.prepare('INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, NULL)').run(id, email, (user.name || '').trim() || null);
+    userRow = db.prepare('SELECT id, email, name FROM users WHERE email = ?').get(email);
+  }
   req.session.authenticated = true;
   req.session.user = {
-    email: user.email || null,
-    name: user.name || null,
+    email: userRow.email,
+    name: userRow.name || user.name || null,
     picture: user.picture || null,
   };
   res.redirect(frontendUrl);

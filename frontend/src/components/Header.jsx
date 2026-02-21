@@ -34,14 +34,28 @@ export default function Header({ view, onNavigate }) {
           >
             New route
           </button>
+          {authEnabled && (
+            <button
+              type="button"
+              className={`header-link ${view === 'profile' ? 'is-active' : ''}`}
+              onClick={() => onNavigate('profile')}
+            >
+              Profile
+            </button>
+          )}
         </nav>
         <div className="header-actions">
           {authEnabled && (
             <>
               {user?.email && (
-                <span className="header-user-email" title={user.name || user.email}>
+                <button
+                  type="button"
+                  className="header-user-email"
+                  onClick={() => onNavigate('profile')}
+                  title={user.name ? `${user.name} (${user.email})` : user.email}
+                >
                   {user.email}
-                </span>
+                </button>
               )}
               <button type="button" className="btn btn-sm btn-ghost header-logout-btn" onClick={logout} title="Log out">
                 Log out

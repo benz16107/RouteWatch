@@ -12,6 +12,7 @@
     "test:apis": "node scripts/test-apis.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.6.0",
     "cookie-session": "^2.1.1",
     "cors": "^2.8.5",

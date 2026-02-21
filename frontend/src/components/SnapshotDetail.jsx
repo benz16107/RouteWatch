@@ -1,5 +1,11 @@
 import { useEffect } from 'react'
 import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
+
+/** Strip HTML tags to prevent XSS when rendering external content (e.g. Google Directions instructions). */
+function stripHtml(html) {
+  if (typeof html !== 'string') return ''
+  return html.replace(/<[^>]*>/g, '')
+}
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -72,7 +78,7 @@ export default function SnapshotDetail({ snapshot }) {
             <ol style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.8rem', lineHeight: 1.5, maxHeight: 140, overflowY: 'auto' }}>
               {steps.map((step, i) => (
                 <li key={i} style={{ marginBottom: '0.5rem' }}>
-                  <span dangerouslySetInnerHTML={{ __html: step.instruction }} />
+                  <span>{stripHtml(step.instruction)}</span>
                   {step.distanceText && (
                     <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
                       ({step.distanceText}{step.durationText ? `, ${step.durationText}` : ''})

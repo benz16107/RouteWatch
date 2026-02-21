@@ -96,7 +96,7 @@ You can enable one or both:
 3. In `.env` set **`GOOGLE_OAUTH_CLIENT_ID`** and **`GOOGLE_OAUTH_CLIENT_SECRET`** (from the OAuth client).
 4. Restart the server. The sign-in page will show **Sign in with Google**; after consent, users are signed in with their Google account (email shown in the header).
 
-If frontend and backend are on different hosts (e.g. Vercel + Railway), set **`BACKEND_URL`** and **`FRONTEND_URL`** so the OAuth callback and redirect work; set **`VITE_API_URL`** when building the frontend so the Google button points to your API.
+If frontend and backend are on different hosts (e.g. DigitalOcean with separate frontend/backend apps), set **`BACKEND_URL`** and **`FRONTEND_URL`** on the backend so the OAuth callback and session cookie work; set **`VITE_API_URL`** when building the frontend so API calls go to your backend. **→ Full checklist:** [DEPLOYMENT-GOOGLE-LOGIN.md](DEPLOYMENT-GOOGLE-LOGIN.md)
 
 **Local testing with Google Sign-In:** Use the built app on one origin so the session cookie works: run `npm run build` then `node backend/server.js`, open `http://localhost:3001`, and add `http://localhost:3001/api/auth/google/callback` as a redirect URI in Google Console.
 

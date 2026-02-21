@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cookieSession from 'cookie-session';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -17,28 +18,64 @@ if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
 
 initDatabase();
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 const authPassword = process.env.AUTH_PASSWORD || '';
 const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
 const googleClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
 const authEnabled = authPassword.length > 0 || googleClientId.length > 0;
 
-app.use(cors({ origin: true, credentials: true }));
+const sessionSecret = process.env.AUTH_SECRET || process.env.AUTH_PASSWORD || 'routewatch-session-secret';
+if (isProduction && authEnabled && sessionSecret === 'routewatch-session-secret') {
+  console.warn('[Security] Set AUTH_SECRET or AUTH_PASSWORD in production. Using default session secret is unsafe.');
+}
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  if (isProduction) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
+const corsOrigin = process.env.FRONTEND_URL || true;
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
-// Cookie-based session so login persists across multiple app instances (e.g. DigitalOcean)
+
+// Rate limit auth endpoints to reduce brute-force and abuse
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Too many attempts. Try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth', authLimiter);
+
+// Cookie-based session so login persists across multiple app instances (e.g. DigitalOcean).
+// When frontend and backend are on different origins (FRONTEND_URL set), use sameSite: 'none'
+// so the browser sends the cookie on cross-origin API requests; otherwise /api/auth/me would not see the session.
+const cookieSameSite = isProduction && process.env.FRONTEND_URL ? 'none' : 'lax';
 app.use(cookieSession({
   name: 'routewatch.sid',
-  keys: [process.env.AUTH_SECRET || process.env.AUTH_PASSWORD || 'routewatch-session-secret'],
+  keys: [sessionSecret],
   maxAge: 7 * 24 * 60 * 60 * 1000,
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  secure: isProduction,
+  sameSite: cookieSameSite,
 }));
 
-// Log and normalize 500 errors
+if (isProduction && googleClientId.length > 0) {
+  if (!process.env.BACKEND_URL) console.warn('[Google OAuth] Set BACKEND_URL to your public backend URL so the OAuth redirect URI matches Google Console.');
+  if (!process.env.FRONTEND_URL) console.warn('[Google OAuth] If frontend and backend are on different hosts, set FRONTEND_URL so the session cookie works after login. See DEPLOYMENT-GOOGLE-LOGIN.md');
+}
+
+// Log and normalize 500 errors; in production do not leak internal messages to client
 function handleError(res, e, context = '') {
   const msg = e?.message || String(e);
   console.error(`[API Error]${context ? ` ${context}:` : ''}`, msg);
-  res.status(500).json({ error: msg });
+  const clientMessage = isProduction ? 'An error occurred. Please try again.' : msg;
+  res.status(500).json({ error: clientMessage });
 }
 
 // Pick value from row by key (case-insensitive); SQLite/drivers may return different key casing
@@ -110,15 +147,15 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-// Debug: see exact redirect_uri this app uses (add this exact URL to Google Console)
+// Debug: see exact redirect_uri this app uses (add this exact URL to Google Console). Disabled in production.
 app.get('/api/auth/google/redirect-uri', (req, res) => {
+  if (isProduction) return res.status(404).json({ error: 'Not found' });
   const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   const redirectUri = `${backendUrl}/api/auth/google/callback`;
   res.json({ redirect_uri: redirectUri, backend_url: backendUrl });
 });
 
 // Signed OAuth state (no session needed – works when callback hits another instance or cookie missing)
-const sessionSecret = process.env.AUTH_SECRET || process.env.AUTH_PASSWORD || 'routewatch-session-secret';
 function signState(state) {
   const sig = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex');
   return `${state}.${sig}`;

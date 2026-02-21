@@ -2,6 +2,7 @@ import { useState } from 'react'
 import PlaceAutocomplete from './PlaceAutocomplete'
 import { fetchJson } from '../utils/api.js'
 import { getCurrentLocationAddress } from '../utils/geolocation.js'
+import { COUNTRY_OPTIONS } from '../utils/countries.js'
 
 const API = '/api'
 
@@ -12,6 +13,7 @@ export default function RouteWizard({ onCreated, onCancel }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [locationLoading, setLocationLoading] = useState(false)
+  const [countryCode, setCountryCode] = useState('')
   const [form, setForm] = useState({
     start_location: '',
     end_location: '',
@@ -147,6 +149,20 @@ export default function RouteWizard({ onCreated, onCancel }) {
             <h2>Where do you want to track?</h2>
             <p className="wizard-desc">Enter the start and end of the route.</p>
             <div className="form-group">
+              <label htmlFor="wizard-country">Country (for address search)</label>
+              <select
+                id="wizard-country"
+                value={countryCode}
+                onChange={(e) => setCountryCode(e.target.value)}
+                className="form-input"
+                style={{ maxWidth: '20rem' }}
+              >
+                {COUNTRY_OPTIONS.map(({ code, name }) => (
+                  <option key={code || 'world'} value={code}>{name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
               <label>From</label>
               <div className="input-with-action">
                 <PlaceAutocomplete
@@ -154,6 +170,7 @@ export default function RouteWizard({ onCreated, onCancel }) {
                   onChange={(v) => setForm(prev => ({ ...prev, start_location: v }))}
                   placeholder="Start address"
                   id="wiz_start"
+                  countryCode={countryCode || undefined}
                   required
                 />
                 <button
@@ -183,6 +200,7 @@ export default function RouteWizard({ onCreated, onCancel }) {
                 onChange={(v) => setForm(prev => ({ ...prev, end_location: v }))}
                 placeholder="Destination address"
                 id="wiz_end"
+                countryCode={countryCode || undefined}
                 required
               />
               <input

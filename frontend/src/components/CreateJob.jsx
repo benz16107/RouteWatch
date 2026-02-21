@@ -2,6 +2,7 @@ import { useState } from 'react'
 import PlaceAutocomplete from './PlaceAutocomplete'
 import { fetchJson } from '../utils/api.js'
 import { getCurrentLocationAddress } from '../utils/geolocation.js'
+import { COUNTRY_OPTIONS } from '../utils/countries.js'
 
 const API = '/api'
 
@@ -9,6 +10,7 @@ export default function CreateJob({ onCreated, onCancel }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [locationLoading, setLocationLoading] = useState(false)
+  const [countryCode, setCountryCode] = useState('')
   const [form, setForm] = useState({
     start_location: '',
     end_location: '',
@@ -110,6 +112,20 @@ export default function CreateJob({ onCreated, onCancel }) {
       <h2 style={{ marginBottom: '1.25rem' }}>Create New Job</h2>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
+          <label htmlFor="createjob-country">Country (for address search)</label>
+          <select
+            id="createjob-country"
+            value={countryCode}
+            onChange={(e) => setCountryCode(e.target.value)}
+            className="form-input"
+            style={{ maxWidth: '20rem', marginBottom: '0.5rem' }}
+          >
+            {COUNTRY_OPTIONS.map(({ code, name }) => (
+              <option key={code || 'world'} value={code}>{name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
           <label>Start Location</label>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
@@ -118,6 +134,7 @@ export default function CreateJob({ onCreated, onCancel }) {
                 onChange={(v) => setForm(prev => ({ ...prev, start_location: v }))}
                 placeholder="e.g. San Francisco, CA"
                 id="start_location"
+                countryCode={countryCode || undefined}
                 required
               />
             </div>
@@ -140,6 +157,7 @@ export default function CreateJob({ onCreated, onCancel }) {
             onChange={(v) => setForm(prev => ({ ...prev, end_location: v }))}
             placeholder="e.g. Oakland, CA"
             id="end_location"
+            countryCode={countryCode || undefined}
             required
           />
         </div>

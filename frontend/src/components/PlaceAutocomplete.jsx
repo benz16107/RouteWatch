@@ -2,14 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 
 const API = '/api'
 
-/** Derive country code from browser locale (e.g. en-US → us, en-GB → gb) or env override */
+/** Optional country restriction: set VITE_PLACES_COUNTRY to a 2-letter code (e.g. us, gb) to restrict autocomplete; leave unset for worldwide results. */
 function getDefaultCountry() {
   const env = import.meta.env?.VITE_PLACES_COUNTRY || ''
-  if (env && env.length === 2) return env.toLowerCase()
-  const lang = typeof navigator !== 'undefined' ? navigator.language : ''
-  const parts = lang.split('-')
-  const region = parts[parts.length - 1]
-  if (region && region.length === 2) return region.toLowerCase()
+  if (env && env.length === 2) return env.trim().toLowerCase()
   return ''
 }
 

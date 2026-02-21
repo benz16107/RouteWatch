@@ -342,11 +342,22 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
     }
   }, [job?.id, snapshots.length, chartRange, chartInnerWidth])
 
+  const SCROLLBAR_HIT_PX = 12
+
   const handleChartMouseMove = useCallback(
     (e) => {
       const el = chartScrollRef.current
       if (!el || !scatterData.length) return
       const rect = el.getBoundingClientRect()
+      if (e.clientY >= rect.bottom - SCROLLBAR_HIT_PX) {
+        if (chartTooltipRafRef.current != null) {
+          cancelAnimationFrame(chartTooltipRafRef.current)
+          chartTooltipRafRef.current = null
+        }
+        chartTooltipPendingRef.current = null
+        setChartTooltip((prev) => (prev.point ? { point: null, x: 0, y: 0 } : prev))
+        return
+      }
       const plotWidth = el.scrollWidth - CHART_MARGIN_RIGHT
       if (plotWidth <= 0) return
       const plotX = Math.max(0, Math.min(plotWidth, el.scrollLeft + (e.clientX - rect.left)))

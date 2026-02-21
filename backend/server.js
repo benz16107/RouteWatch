@@ -60,15 +60,16 @@ function pick(row, ...possibleKeys) {
   return null;
 }
 
-// Normalize job so frontend always gets name, start_name, end_name with correct keys
+// Normalize job so frontend always gets name, start_name, end_name with correct keys; omit user_id from response
 function toJobResponse(row) {
   if (!row) return row;
   const nameVal = pick(row, 'name', 'routeName');
   const startNameVal = pick(row, 'start_name', 'startName');
   const endNameVal = pick(row, 'end_name', 'endName');
   const strOrNull = (v) => (v == null || (typeof v === 'string' && !v.trim())) ? null : String(v).trim();
+  const { user_id: _uid, ...rest } = row;
   return {
-    ...row,
+    ...rest,
     name: strOrNull(nameVal),
     start_name: strOrNull(startNameVal),
     end_name: strOrNull(endNameVal),
@@ -112,11 +113,38 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ ok: true });
 });
 
+// Debug: see exact redirect_uri this app uses (add this exact URL to Google Console)
+app.get('/api/auth/google/redirect-uri', (req, res) => {
+  const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+  const redirectUri = `${backendUrl}/api/auth/google/callback`;
+  res.json({ redirect_uri: redirectUri, backend_url: backendUrl });
+});
+
+// Signed OAuth state (no session needed – works when callback hits another instance or cookie missing)
+const sessionSecret = process.env.AUTH_SECRET || process.env.AUTH_PASSWORD || 'routewatch-session-secret';
+function signState(state) {
+  const sig = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex');
+  return `${state}.${sig}`;
+}
+function verifyState(signedState) {
+  if (typeof signedState !== 'string') return false;
+  const i = signedState.lastIndexOf('.');
+  if (i <= 0) return false;
+  const state = signedState.slice(0, i);
+  const sig = signedState.slice(i + 1);
+  const expected = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex');
+  if (sig.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'));
+  } catch {
+    return false;
+  }
+}
+
 // Google OAuth: redirect user to Google
 app.get('/api/auth/google', (req, res) => {
   if (!googleClientId.length) return res.status(501).json({ error: 'Google Sign-In not configured' });
   const state = crypto.randomBytes(24).toString('hex');
-  req.session.googleOAuthState = state;
   const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   const redirectUri = `${backendUrl}/api/auth/google/callback`;
   const params = new URLSearchParams({
@@ -124,19 +152,18 @@ app.get('/api/auth/google', (req, res) => {
     client_id: googleClientId,
     redirect_uri: redirectUri,
     scope: 'openid email profile',
-    state,
+    state: signState(state),
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
 
 // Google OAuth: callback – exchange code for tokens, fetch user, set session, redirect to app
 app.get('/api/auth/google/callback', async (req, res) => {
-  const { code, state } = req.query;
+  const { code, state: signedState } = req.query;
   const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
-  if (!code || !state || state !== req.session?.googleOAuthState) {
+  if (!code || !signedState || !verifyState(signedState)) {
     return res.redirect(`${frontendUrl}?auth_error=invalid_callback`);
   }
-  delete req.session.googleOAuthState;
   const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   const redirectUri = `${backendUrl}/api/auth/google/callback`;
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -182,11 +209,26 @@ function requireAuth(req, res, next) {
 }
 app.use(requireAuth);
 
-// API: List jobs
+/** Current user id for scoping routes: Google email, password-user = 'default', auth off = 'anonymous'. */
+function getCurrentUserId(req) {
+  if (!authEnabled) return 'anonymous';
+  if (req.session?.user?.email) return req.session.user.email;
+  if (req.session?.authenticated) return 'default';
+  return 'anonymous';
+}
+
+/** Ensure job belongs to current user; returns job or null. */
+function getJobForUser(db, jobId, userId) {
+  const job = db.prepare('SELECT * FROM collection_jobs WHERE id = ? AND user_id = ?').get(jobId, userId);
+  return job || null;
+}
+
+// API: List jobs (only current user's)
 app.get('/api/jobs', (req, res) => {
   try {
+    const userId = getCurrentUserId(req);
     const db = getDb();
-    const jobs = db.prepare('SELECT * FROM collection_jobs ORDER BY created_at DESC').all();
+    const jobs = db.prepare('SELECT * FROM collection_jobs WHERE user_id = ? ORDER BY created_at DESC').all(userId);
     res.json(jobs.map(toJobResponse));
   } catch (e) {
     handleError(res, e, 'GET /api/jobs');
@@ -197,7 +239,7 @@ app.get('/api/jobs', (req, res) => {
 app.get('/api/jobs/:id', (req, res) => {
   try {
     const db = getDb();
-    const job = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
+    const job = getJobForUser(db, req.params.id, getCurrentUserId(req));
     if (!job) return res.status(404).json({ error: 'Job not found' });
     res.json(toJobResponse(job));
   } catch (e) {
@@ -229,15 +271,17 @@ app.post('/api/jobs', (req, res) => {
     }
 
     const id = uuidv4();
+    const userId = getCurrentUserId(req);
     const db = getDb();
     const jobName = name != null && String(name).trim() !== '' ? String(name).trim() : null;
     const startName = (bodyStartName ?? req.body.startName) != null && String(bodyStartName ?? req.body.startName).trim() !== '' ? String(bodyStartName ?? req.body.startName).trim() : null;
     const endName = (bodyEndName ?? req.body.endName) != null && String(bodyEndName ?? req.body.endName).trim() !== '' ? String(bodyEndName ?? req.body.endName).trim() : null;
     db.prepare(`
-      INSERT INTO collection_jobs (id, name, start_name, end_name, start_location, end_location, start_time, end_time, cycle_minutes, cycle_seconds, duration_days, navigation_type, avoid_highways, avoid_tolls, additional_routes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO collection_jobs (id, user_id, name, start_name, end_name, start_location, end_location, start_time, end_time, cycle_minutes, cycle_seconds, duration_days, navigation_type, avoid_highways, avoid_tolls, additional_routes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
+      userId,
       jobName,
       startName,
       endName,
@@ -268,7 +312,7 @@ app.patch('/api/jobs/:id', (req, res) => {
       return res.status(400).json({ error: 'Request body required' });
     }
     const db = getDb();
-    const job = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
+    const job = getJobForUser(db, req.params.id, getCurrentUserId(req));
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
     const isRunning = String(job.status).toLowerCase() === 'running';
@@ -324,11 +368,12 @@ app.patch('/api/jobs/:id', (req, res) => {
 // API: Delete job
 app.delete('/api/jobs/:id', (req, res) => {
   try {
-    stopJob(req.params.id);
     const db = getDb();
+    const job = getJobForUser(db, req.params.id, getCurrentUserId(req));
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    stopJob(req.params.id);
     db.prepare('DELETE FROM route_snapshots WHERE job_id = ?').run(req.params.id);
-    const r = db.prepare('DELETE FROM collection_jobs WHERE id = ?').run(req.params.id);
-    if (r.changes === 0) return res.status(404).json({ error: 'Job not found' });
+    db.prepare('DELETE FROM collection_jobs WHERE id = ? AND user_id = ?').run(req.params.id, getCurrentUserId(req));
     res.json({ ok: true });
   } catch (e) {
     handleError(res, e, 'DELETE /api/jobs/:id');
@@ -338,10 +383,12 @@ app.delete('/api/jobs/:id', (req, res) => {
 // API: Start job
 app.post('/api/jobs/:id/start', async (req, res) => {
   try {
-    await startJob(req.params.id);
     const db = getDb();
-    const job = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
-    res.json(toJobResponse(job));
+    const job = getJobForUser(db, req.params.id, getCurrentUserId(req));
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    await startJob(req.params.id);
+    const updated = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
+    res.json(toJobResponse(updated));
   } catch (e) {
     handleError(res, e, 'POST /api/jobs/:id/start');
   }
@@ -350,10 +397,12 @@ app.post('/api/jobs/:id/start', async (req, res) => {
 // API: Stop job
 app.post('/api/jobs/:id/stop', (req, res) => {
   try {
-    stopJob(req.params.id);
     const db = getDb();
-    const job = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
-    res.json(toJobResponse(job));
+    const job = getJobForUser(db, req.params.id, getCurrentUserId(req));
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    stopJob(req.params.id);
+    const updated = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
+    res.json(toJobResponse(updated));
   } catch (e) {
     handleError(res, e, 'POST /api/jobs/:id/stop');
   }
@@ -362,10 +411,12 @@ app.post('/api/jobs/:id/stop', (req, res) => {
 // API: Pause job
 app.post('/api/jobs/:id/pause', (req, res) => {
   try {
-    pauseJob(req.params.id);
     const db = getDb();
-    const job = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
-    res.json(toJobResponse(job));
+    const job = getJobForUser(db, req.params.id, getCurrentUserId(req));
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    pauseJob(req.params.id);
+    const updated = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
+    res.json(toJobResponse(updated));
   } catch (e) {
     handleError(res, e, 'POST /api/jobs/:id/pause');
   }
@@ -374,10 +425,12 @@ app.post('/api/jobs/:id/pause', (req, res) => {
 // API: Resume job
 app.post('/api/jobs/:id/resume', async (req, res) => {
   try {
-    await resumeJob(req.params.id);
     const db = getDb();
-    const job = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
-    res.json(toJobResponse(job));
+    const job = getJobForUser(db, req.params.id, getCurrentUserId(req));
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    await resumeJob(req.params.id);
+    const updated = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
+    res.json(toJobResponse(updated));
   } catch (e) {
     handleError(res, e, 'POST /api/jobs/:id/resume');
   }
@@ -458,6 +511,8 @@ app.get('/api/route-preview', async (req, res) => {
 app.get('/api/jobs/:id/snapshots', (req, res) => {
   try {
     const db = getDb();
+    const job = getJobForUser(db, req.params.id, getCurrentUserId(req));
+    if (!job) return res.status(404).json({ error: 'Job not found' });
     const snapshots = db.prepare(
       'SELECT * FROM route_snapshots WHERE job_id = ? ORDER BY collected_at ASC'
     ).all(req.params.id);
@@ -472,7 +527,7 @@ app.get('/api/jobs/:id/export', (req, res) => {
   try {
     const format = req.query.format || 'json';
     const db = getDb();
-    const job = db.prepare('SELECT * FROM collection_jobs WHERE id = ?').get(req.params.id);
+    const job = getJobForUser(db, req.params.id, getCurrentUserId(req));
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
     const snapshots = db.prepare(

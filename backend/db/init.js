@@ -69,6 +69,10 @@ export function initDatabase() {
     if (!cols.some(c => c.name === 'end_name')) {
       db.exec('ALTER TABLE collection_jobs ADD COLUMN end_name TEXT');
     }
+    if (!cols.some(c => c.name === 'user_id')) {
+      db.exec("ALTER TABLE collection_jobs ADD COLUMN user_id TEXT DEFAULT 'anonymous'");
+      db.exec("UPDATE collection_jobs SET user_id = 'anonymous' WHERE user_id IS NULL");
+    }
   } catch (_) {}
 
   return db;

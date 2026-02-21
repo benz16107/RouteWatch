@@ -102,6 +102,8 @@ If frontend and backend are on different hosts (e.g. Vercel + Railway), set **`B
 
 Sessions last 7 days (HTTP-only cookie). Use **Sign out** in the header to log out. If neither `AUTH_PASSWORD` nor Google OAuth is configured, the app has no login.
 
+**Per-user routes:** When auth is enabled, each user only sees and manages their own routes. Google Sign-In users are scoped by email; password users share one account. Existing jobs (from before `user_id` was added) are treated as belonging to the anonymous/default account.
+
 ## Build for production
 
 ```bash

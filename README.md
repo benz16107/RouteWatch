@@ -133,7 +133,7 @@ The app runs as one Node process: it serves the API and the static frontend. Use
 | [Railway](https://railway.app) | Add a volume for `backend/data`, set env vars, deploy from GitHub. |
 | [Render](https://render.com) | Web Service, add **persistent disk** for `backend/data` so the DB survives restarts. |
 | [Fly.io](https://fly.io) | Use a [volume](https://fly.io/docs/reference/volumes/) for `backend/data` and run `node backend/server.js`. |
-| [DigitalOcean App Platform](https://www.digitalocean.com/products/app-platform) | Node app; add a volume or use a managed DB later if you outgrow SQLite. |
+| [DigitalOcean App Platform](https://www.digitalocean.com/products/app-platform) | Node app; add a volume or use a managed DB later if you outgrow SQLite. Use **repo root** as source; Build Command: `npm run build`; Run Command: `node backend/server.js`. |
 | VPS (e.g. DigitalOcean Droplet, Linode) | Full control: install Node, run with `node backend/server.js` or use PM2; put Nginx in front for HTTPS if you want. |
 
 ### 3. Set environment variables on the host

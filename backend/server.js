@@ -19,6 +19,8 @@ if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
 initDatabase();
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
+// Behind a reverse proxy (e.g. DigitalOcean); trust X-Forwarded-* so rate limiter sees real client IP
+if (isProduction) app.set('trust proxy', 1);
 const authPassword = (process.env.AUTH_PASSWORD || '').trim();
 const googleClientId = (process.env.GOOGLE_OAUTH_CLIENT_ID || '').trim();
 const googleClientSecret = (process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim();

@@ -643,14 +643,46 @@ app.get('/api/route-preview', async (req, res) => {
 
 // Columns for snapshot list (exclude route_details to cut egress; fetch via /snapshots/:snapshotId when needed)
 const SNAPSHOT_LIST_COLS = 'id, job_id, route_index, collected_at, duration_seconds, distance_meters';
+const SNAPSHOT_LIST_TTL_MS = 30 * 1000;   // 30s – reduces DB hits when polling
+const SNAPSHOT_DETAIL_TTL_MS = 60 * 60 * 1000; // 1h – route_details never changes
+const SNAPSHOT_LIST_MAX = 5000;           // cap rows per request
 
-// API: Get snapshots for job (no route_details – use GET /snapshots/:snapshotId for map/details)
+const snapshotListCache = new Map(); // jobId -> { at: number, data: array }
+const snapshotDetailCache = new Map(); // snapshotId -> { at: number, data: object }
+function getCached(key, cache, ttlMs) {
+  const ent = cache.get(key);
+  if (!ent || Date.now() - ent.at > ttlMs) return null;
+  return ent.data;
+}
+function setCached(key, cache, data) {
+  cache.set(key, { at: Date.now(), data });
+}
+
+// API: Get snapshots for job (no route_details). Use ?since=ISO8601 for delta (only new snapshots). Use ?limit=N to cap.
 app.get('/api/jobs/:id/snapshots', async (req, res) => {
   try {
+    const since = (req.query.since && String(req.query.since).trim()) || null;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || SNAPSHOT_LIST_MAX, 1), SNAPSHOT_LIST_MAX);
     const db = await getDb();
     const job = await getJobForUser(db, req.params.id, getCurrentUserId(req));
     if (!job) return res.status(404).json({ error: 'Job not found' });
-    const snapshots = await db.query(`SELECT ${SNAPSHOT_LIST_COLS} FROM route_snapshots WHERE job_id = ? ORDER BY collected_at ASC`, [req.params.id]);
+
+    if (since) {
+      const snapshots = await db.query(
+        `SELECT ${SNAPSHOT_LIST_COLS} FROM route_snapshots WHERE job_id = ? AND collected_at > ? ORDER BY collected_at ASC LIMIT ?`,
+        [req.params.id, since, limit]
+      );
+      return res.json(snapshots);
+    }
+
+    const cached = getCached(req.params.id, snapshotListCache, SNAPSHOT_LIST_TTL_MS);
+    if (cached) return res.json(cached);
+
+    const snapshots = await db.query(
+      `SELECT ${SNAPSHOT_LIST_COLS} FROM route_snapshots WHERE job_id = ? ORDER BY collected_at ASC LIMIT ?`,
+      [req.params.id, limit]
+    );
+    setCached(req.params.id, snapshotListCache, snapshots);
     res.json(snapshots);
   } catch (e) {
     handleError(res, e, 'GET /api/jobs/:id/snapshots');
@@ -660,15 +692,20 @@ app.get('/api/jobs/:id/snapshots', async (req, res) => {
 // API: Get one snapshot including route_details (for map/turn-by-turn; call only when viewing that snapshot)
 app.get('/api/jobs/:id/snapshots/:snapshotId', async (req, res) => {
   try {
+    const sid = req.params.snapshotId;
+    const cached = getCached(sid, snapshotDetailCache, SNAPSHOT_DETAIL_TTL_MS);
+    if (cached) return res.json(cached);
+
     const db = await getDb();
     const job = await getJobForUser(db, req.params.id, getCurrentUserId(req));
     if (!job) return res.status(404).json({ error: 'Job not found' });
     const row = await db.queryOne(
       'SELECT id, job_id, route_index, collected_at, duration_seconds, distance_meters, route_details FROM route_snapshots WHERE job_id = ? AND id = ?',
-      [req.params.id, req.params.snapshotId]
+      [req.params.id, sid]
     );
     if (!row) return res.status(404).json({ error: 'Snapshot not found' });
     const snapshot = { ...row, route_details: pick(row, 'route_details') ?? row.route_details };
+    setCached(sid, snapshotDetailCache, snapshot);
     res.json(snapshot);
   } catch (e) {
     handleError(res, e, 'GET /api/jobs/:id/snapshots/:snapshotId');
@@ -683,7 +720,10 @@ app.get('/api/jobs/:id/export', async (req, res) => {
     const job = await getJobForUser(db, req.params.id, getCurrentUserId(req));
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
-    const snapshots = await db.query(`SELECT ${SNAPSHOT_LIST_COLS} FROM route_snapshots WHERE job_id = ? ORDER BY collected_at ASC`, [req.params.id]);
+    const snapshots = await db.query(
+      `SELECT ${SNAPSHOT_LIST_COLS} FROM route_snapshots WHERE job_id = ? ORDER BY collected_at ASC LIMIT ?`,
+      [req.params.id, SNAPSHOT_LIST_MAX]
+    );
 
     if (format === 'csv') {
       const header = 'collected_at,duration_seconds,distance_meters,duration_minutes\n';

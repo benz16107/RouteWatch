@@ -55,28 +55,65 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const [snapshotDetailsCache, setSnapshotDetailsCache] = useState({}) // full snapshot (with route_details) by id – fetched on demand to reduce egress
   const chartHoverPointRef = useRef(null) // avoid setState when same point stays highlighted
   const chartDragRef = useRef({ isDown: false, startX: 0, startScrollLeft: 0, didDrag: false })
+  const lastCollectedAtRef = useRef(null)
 
-  const fetchData = async () => {
+  useEffect(() => {
+    lastCollectedAtRef.current = snapshots.length > 0 ? snapshots[snapshots.length - 1].collected_at : null
+  }, [snapshots])
+
+  const fetchJob = async () => {
     try {
+      const jobData = await fetchJson(`${API}/jobs/${jobId}`, { cache: 'no-store' })
+      setJob(jobData)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const fetchData = useCallback(async (isInitial = false) => {
+    try {
+      const lastCollectedAt = lastCollectedAtRef.current
+      const useDelta = !isInitial && lastCollectedAt != null
+      const url = useDelta
+        ? `${API}/jobs/${jobId}/snapshots?since=${encodeURIComponent(lastCollectedAt)}`
+        : `${API}/jobs/${jobId}/snapshots`
       const [jobData, snapData] = await Promise.all([
         fetchJson(`${API}/jobs/${jobId}`, { cache: 'no-store' }),
-        fetchJson(`${API}/jobs/${jobId}/snapshots`, { cache: 'no-store' }),
+        fetchJson(url, { cache: 'no-store' }),
       ])
       setJob(jobData)
-      setSnapshots(Array.isArray(snapData) ? snapData : [])
+      if (Array.isArray(snapData)) {
+        if (useDelta && snapData.length > 0) {
+          setSnapshots((prev) => {
+            const byId = new Map(prev.map((s) => [s.id, s]))
+            snapData.forEach((s) => byId.set(s.id, s))
+            return [...byId.values()].sort((a, b) => new Date(a.collected_at) - new Date(b.collected_at))
+          })
+        } else if (!useDelta) {
+          setSnapshots(snapData)
+        }
+      }
     } catch (e) {
       console.error(e)
     } finally {
       setLoading(false)
     }
-  }
+  }, [jobId])
 
   useEffect(() => {
-    fetchData()
-    const pollMs = job?.status === 'running' ? 1000 : 5000
-    const interval = setInterval(fetchData, pollMs)
+    setSnapshots([])
+    setLoading(true)
+    lastCollectedAtRef.current = null
+    fetchData(true)
+  }, [jobId, fetchData])
+
+  useEffect(() => {
+    if (!jobId) return
+    fetchJob()
+    const pollMs = job?.status === 'running' ? 5000 : 10000
+    const interval = setInterval(() => fetchData(false), pollMs)
     return () => clearInterval(interval)
-  }, [jobId, job?.status])
+  }, [jobId, job?.status, fetchData])
 
   const snapshotIdToLoad = expandedSnapshotId || chartPopupSnapshot?.id || null
   useEffect(() => {

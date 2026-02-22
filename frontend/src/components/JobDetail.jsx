@@ -52,6 +52,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const [chartTooltip, setChartTooltip] = useState({ point: null, x: 0, y: 0 })
   const [chartTooltipPinned, setChartTooltipPinned] = useState(null)
   const [chartPopupSnapshot, setChartPopupSnapshot] = useState(null)
+  const [snapshotDetailsCache, setSnapshotDetailsCache] = useState({}) // full snapshot (with route_details) by id – fetched on demand to reduce egress
   const chartHoverPointRef = useRef(null) // avoid setState when same point stays highlighted
   const chartDragRef = useRef({ isDown: false, startX: 0, startScrollLeft: 0, didDrag: false })
 
@@ -76,6 +77,18 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
     const interval = setInterval(fetchData, pollMs)
     return () => clearInterval(interval)
   }, [jobId, job?.status])
+
+  const snapshotIdToLoad = expandedSnapshotId || chartPopupSnapshot?.id || null
+  useEffect(() => {
+    if (!snapshotIdToLoad || !jobId || snapshotDetailsCache[snapshotIdToLoad]) return
+    let cancelled = false
+    fetchJson(`${API}/jobs/${jobId}/snapshots/${snapshotIdToLoad}`, { cache: 'no-store' })
+      .then((full) => {
+        if (!cancelled) setSnapshotDetailsCache((c) => ({ ...c, [snapshotIdToLoad]: full }))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [jobId, snapshotIdToLoad])
 
   useEffect(() => {
     if (job?.status !== 'running' || !snapshots.length) {
@@ -845,7 +858,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                         Close
                       </button>
                     </div>
-                    <SnapshotDetail snapshot={chartPopupSnapshot} />
+                    <SnapshotDetail snapshot={snapshotDetailsCache[chartPopupSnapshot?.id] ?? chartPopupSnapshot} />
                   </div>
                 </div>
               )}
@@ -963,7 +976,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                       {expandedSnapshotId === s.id && (
                         <tr className="detail-row">
                           <td colSpan={4}>
-                            <SnapshotDetail snapshot={s} />
+                            <SnapshotDetail snapshot={snapshotDetailsCache[s.id] ?? s} />
                           </td>
                         </tr>
                       )}

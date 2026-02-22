@@ -641,16 +641,37 @@ app.get('/api/route-preview', async (req, res) => {
   }
 });
 
-// API: Get snapshots for job
+// Columns for snapshot list (exclude route_details to cut egress; fetch via /snapshots/:snapshotId when needed)
+const SNAPSHOT_LIST_COLS = 'id, job_id, route_index, collected_at, duration_seconds, distance_meters';
+
+// API: Get snapshots for job (no route_details – use GET /snapshots/:snapshotId for map/details)
 app.get('/api/jobs/:id/snapshots', async (req, res) => {
   try {
     const db = await getDb();
     const job = await getJobForUser(db, req.params.id, getCurrentUserId(req));
     if (!job) return res.status(404).json({ error: 'Job not found' });
-    const snapshots = await db.query('SELECT * FROM route_snapshots WHERE job_id = ? ORDER BY collected_at ASC', [req.params.id]);
+    const snapshots = await db.query(`SELECT ${SNAPSHOT_LIST_COLS} FROM route_snapshots WHERE job_id = ? ORDER BY collected_at ASC`, [req.params.id]);
     res.json(snapshots);
   } catch (e) {
     handleError(res, e, 'GET /api/jobs/:id/snapshots');
+  }
+});
+
+// API: Get one snapshot including route_details (for map/turn-by-turn; call only when viewing that snapshot)
+app.get('/api/jobs/:id/snapshots/:snapshotId', async (req, res) => {
+  try {
+    const db = await getDb();
+    const job = await getJobForUser(db, req.params.id, getCurrentUserId(req));
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    const row = await db.queryOne(
+      'SELECT id, job_id, route_index, collected_at, duration_seconds, distance_meters, route_details FROM route_snapshots WHERE job_id = ? AND id = ?',
+      [req.params.id, req.params.snapshotId]
+    );
+    if (!row) return res.status(404).json({ error: 'Snapshot not found' });
+    const snapshot = { ...row, route_details: pick(row, 'route_details') ?? row.route_details };
+    res.json(snapshot);
+  } catch (e) {
+    handleError(res, e, 'GET /api/jobs/:id/snapshots/:snapshotId');
   }
 });
 
@@ -662,7 +683,7 @@ app.get('/api/jobs/:id/export', async (req, res) => {
     const job = await getJobForUser(db, req.params.id, getCurrentUserId(req));
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
-    const snapshots = await db.query('SELECT * FROM route_snapshots WHERE job_id = ? ORDER BY collected_at ASC', [req.params.id]);
+    const snapshots = await db.query(`SELECT ${SNAPSHOT_LIST_COLS} FROM route_snapshots WHERE job_id = ? ORDER BY collected_at ASC`, [req.params.id]);
 
     if (format === 'csv') {
       const header = 'collected_at,duration_seconds,distance_meters,duration_minutes\n';

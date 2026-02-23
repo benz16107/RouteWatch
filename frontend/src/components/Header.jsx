@@ -5,85 +5,133 @@ export default function Header({ view, onNavigate }) {
   const { theme, setTheme } = useTheme()
   const { authEnabled, user, logout } = useAuth()
 
+  const navLinks = (
+    <>
+      <button
+        type="button"
+        className={`header-link ${view === 'dashboard' ? 'is-active' : ''}`}
+        onClick={() => onNavigate('dashboard')}
+      >
+        Home
+      </button>
+      <button
+        type="button"
+        className={`header-link ${view === 'routes' || view === 'detail' ? 'is-active' : ''}`}
+        onClick={() => onNavigate('routes')}
+      >
+        Routes
+      </button>
+      <button
+        type="button"
+        className={`header-link header-link-cta ${view === 'new' ? 'is-active' : ''}`}
+        onClick={() => onNavigate('new')}
+      >
+        New route
+      </button>
+      {authEnabled && (
+        <button
+          type="button"
+          className={`header-link ${view === 'profile' ? 'is-active' : ''}`}
+          onClick={() => onNavigate('profile')}
+        >
+          Profile
+        </button>
+      )}
+    </>
+  )
+
   return (
-    <header className="site-header">
-      <div className="header-inner">
-        <a href="/" className="header-brand" onClick={(e) => { e.preventDefault(); onNavigate('dashboard') }} aria-label="RouteWatch home">
-          <span className="header-logo" aria-hidden>◇</span>
-          <span className="header-title">RouteWatch</span>
-        </a>
-        <nav className="header-nav" aria-label="Main">
-          <button
-            type="button"
-            className={`header-link ${view === 'dashboard' ? 'is-active' : ''}`}
-            onClick={() => onNavigate('dashboard')}
-          >
-            Home
-          </button>
-          <button
-            type="button"
-            className={`header-link ${view === 'routes' || view === 'detail' ? 'is-active' : ''}`}
-            onClick={() => onNavigate('routes')}
-          >
-            Routes
-          </button>
-          <button
-            type="button"
-            className={`header-link header-link-cta ${view === 'new' ? 'is-active' : ''}`}
-            onClick={() => onNavigate('new')}
-          >
-            New route
-          </button>
-          {authEnabled && (
-            <button
-              type="button"
-              className={`header-link ${view === 'profile' ? 'is-active' : ''}`}
-              onClick={() => onNavigate('profile')}
-            >
-              Profile
-            </button>
-          )}
-        </nav>
-        <div className="header-actions">
-          {authEnabled && (
-            <>
-              {user && (
-                <button
-                  type="button"
-                  className="header-user-name"
-                  onClick={() => onNavigate('profile')}
-                  title={user.email ? `${user.name || 'Profile'} (${user.email})` : (user.name || 'Profile')}
-                >
-                  {user.name?.trim() || 'Profile'}
+    <>
+      <header className="site-header">
+        <div className="header-inner">
+          <a href="/" className="header-brand" onClick={(e) => { e.preventDefault(); onNavigate('dashboard') }} aria-label="RouteWatch home">
+            <span className="header-logo" aria-hidden>◇</span>
+            <span className="header-title">RouteWatch</span>
+          </a>
+          <nav className="header-nav header-nav-desktop" aria-label="Main">
+            {navLinks}
+          </nav>
+          <div className="header-actions">
+            {authEnabled && (
+              <>
+                {user && (
+                  <button
+                    type="button"
+                    className="header-user-name"
+                    onClick={() => onNavigate('profile')}
+                    title={user.email ? `${user.name || 'Profile'} (${user.email})` : (user.name || 'Profile')}
+                  >
+                    {user.name?.trim() || 'Profile'}
+                  </button>
+                )}
+                <button type="button" className="btn btn-sm btn-ghost header-logout-btn" onClick={logout} title="Log out">
+                  Log out
                 </button>
-              )}
-              <button type="button" className="btn btn-sm btn-ghost header-logout-btn" onClick={logout} title="Log out">
-                Log out
+              </>
+            )}
+            <div className="theme-toggle" role="group" aria-label="Theme">
+              <button
+                type="button"
+                className={`theme-btn ${theme === 'light' ? 'is-active' : ''}`}
+                onClick={() => setTheme('light')}
+                title="Light"
+                aria-pressed={theme === 'light'}
+              >
+                <span aria-hidden>☀</span>
               </button>
-            </>
-          )}
-          <div className="theme-toggle" role="group" aria-label="Theme">
-            <button
-              type="button"
-              className={`theme-btn ${theme === 'light' ? 'is-active' : ''}`}
-              onClick={() => setTheme('light')}
-              title="Light"
-              aria-pressed={theme === 'light'}
-            >
-              <span aria-hidden>☀</span>
-            </button>
-            <button
-              type="button"
-              className={`theme-btn ${theme === 'dark' ? 'is-active' : ''}`}
-              onClick={() => setTheme('dark')}
-              title="Dark"
-              aria-pressed={theme === 'dark'}
-            >
-              <span aria-hidden>☾</span>
-            </button>
+              <button
+                type="button"
+                className={`theme-btn ${theme === 'dark' ? 'is-active' : ''}`}
+                onClick={() => setTheme('dark')}
+                title="Dark"
+                aria-pressed={theme === 'dark'}
+              >
+                <span aria-hidden>☾</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
+      <nav className="mobile-bottom-nav" aria-label="Main navigation">
+        <button
+          type="button"
+          className={`mobile-nav-item ${view === 'dashboard' ? 'is-active' : ''}`}
+          onClick={() => onNavigate('dashboard')}
+          aria-current={view === 'dashboard' ? 'page' : undefined}
+        >
+          <span className="mobile-nav-icon" aria-hidden>⌂</span>
+          <span className="mobile-nav-label">Home</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-nav-item ${view === 'routes' || view === 'detail' ? 'is-active' : ''}`}
+          onClick={() => onNavigate('routes')}
+          aria-current={view === 'routes' || view === 'detail' ? 'page' : undefined}
+        >
+          <span className="mobile-nav-icon" aria-hidden>◇</span>
+          <span className="mobile-nav-label">Routes</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-nav-item mobile-nav-item-cta ${view === 'new' ? 'is-active' : ''}`}
+          onClick={() => onNavigate('new')}
+          aria-current={view === 'new' ? 'page' : undefined}
+        >
+          <span className="mobile-nav-icon" aria-hidden>+</span>
+          <span className="mobile-nav-label">New</span>
+        </button>
+        {authEnabled && (
+          <button
+            type="button"
+            className={`mobile-nav-item ${view === 'profile' ? 'is-active' : ''}`}
+            onClick={() => onNavigate('profile')}
+            aria-current={view === 'profile' ? 'page' : undefined}
+          >
+            <span className="mobile-nav-icon" aria-hidden>👤</span>
+            <span className="mobile-nav-label">Profile</span>
+          </button>
+        )}
+      </nav>
+    </>
   )
 }

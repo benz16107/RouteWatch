@@ -3,5 +3,6 @@ frontend/node_modules/
 frontend/dist/
 backend/data/
 .env
+mobile/.env
 *.db
 .DS_Store

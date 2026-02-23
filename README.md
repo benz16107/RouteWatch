@@ -20,6 +20,7 @@ Collect, store, and visualize route travel times between locations using the Goo
 | Backend  | Node.js, Express, SQLite (better-sqlite3) |
 | Scheduler| setInterval (in-process, survives restart) |
 | Frontend | React, Vite, Recharts, Leaflet            |
+| Mobile   | Flutter (see `mobile/README.md`)           |
 | Maps     | Google Directions API, Places Autocomplete|
 
 ## Setup

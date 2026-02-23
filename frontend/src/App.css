@@ -269,6 +269,10 @@ body {
   margin: -0.25rem 0 0.5rem;
 }
 
+.auth-hint-block {
+  margin: 0.75rem 0 0;
+}
+
 /* Profile page */
 .profile-page {
   max-width: 560px;
@@ -2439,6 +2443,97 @@ body {
   margin-bottom: 0.75rem;
 }
 
+/* ========== Mobile website — bottom nav + distinct layout ========== */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .header-nav-desktop {
+    display: none;
+  }
+
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 0.5rem 0;
+    padding-left: max(0.5rem, env(safe-area-inset-left));
+    padding-right: max(0.5rem, env(safe-area-inset-right));
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    justify-content: space-around;
+    align-items: center;
+    gap: 0.25rem;
+    box-shadow: 0 -4px 12px rgba(28, 25, 23, 0.08);
+  }
+
+  [data-theme="dark"] .mobile-bottom-nav {
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+  }
+
+  .mobile-nav-item {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    padding: 0.5rem 0.25rem;
+    min-height: 48px;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color var(--transition), background var(--transition);
+    font-family: inherit;
+  }
+
+  .mobile-nav-item:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+
+  .mobile-nav-item.is-active {
+    color: var(--accent);
+    background: var(--accent-muted);
+  }
+
+  .mobile-nav-item.mobile-nav-item-cta.is-active {
+    background: var(--accent-muted);
+    color: var(--accent);
+  }
+
+  .mobile-nav-icon {
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
+  .mobile-nav-item-cta .mobile-nav-icon {
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+
+  .main.main-with-mobile-nav {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Desktop: ensure main doesn't get mobile padding */
+@media (min-width: 769px) {
+  .main.main-with-mobile-nav {
+    padding-bottom: 2rem;
+  }
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .job-detail-main {
@@ -2453,6 +2548,8 @@ body {
 @media (max-width: 768px) {
   .site-header {
     padding: 0 1rem;
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
     height: auto;
     min-height: 56px;
   }
@@ -2479,12 +2576,34 @@ body {
     margin-left: auto;
   }
 
+  /* Mobile: slightly larger tap targets for primary actions */
+  .btn {
+    min-height: 2.5rem;
+    padding: 0.6rem 1rem;
+  }
+
+  .btn-sm {
+    min-height: 2rem;
+  }
+
+  .auth-page {
+    padding: 1.5rem max(1rem, env(safe-area-inset-left));
+    padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  }
+
+  .route-tile,
+  .card.job-card {
+    padding: 1rem 1.25rem;
+    min-height: 72px;
+  }
+
   .wizard-step-label {
     display: none;
   }
 
   .main {
-    padding: 1.25rem 1rem;
+    padding: 1.25rem max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
   }
 
   .main h2 {

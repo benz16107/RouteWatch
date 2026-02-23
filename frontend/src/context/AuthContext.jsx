@@ -8,7 +8,7 @@ const API = '/api'
 export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authEnabled, setAuthEnabled] = useState(false)
-  const [authConfig, setAuthConfig] = useState({ passwordAuth: false, googleAuth: false })
+  const [authConfig, setAuthConfig] = useState({ passwordAuth: true, googleAuth: true })
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -54,7 +54,7 @@ export function AuthProvider({ children }) {
           googleAuth: !!data?.googleAuth,
         })
       } catch {
-        setAuthConfig({ passwordAuth: false, googleAuth: false })
+        // Keep default (show both) if backend unreachable so Google button stays visible
       }
     }
     loadConfig()

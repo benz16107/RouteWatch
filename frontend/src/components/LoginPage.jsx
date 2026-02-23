@@ -84,6 +84,9 @@ export default function LoginPage() {
             </form>
           </>
         )}
+        {showPassword && !showGoogle && (
+          <p className="auth-hint auth-hint-block">Sign in with Google is not configured. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in the server environment (.env or deployment env vars), then restart the backend.</p>
+        )}
         {showPassword && (
           <p className="auth-footer">
             Don&apos;t have an account?{' '}
@@ -91,7 +94,7 @@ export default function LoginPage() {
           </p>
         )}
         {!showPassword && !showGoogle && (
-          <p className="auth-error">No sign-in method configured on the server. Set Google OAuth (GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET) in your deployment environment variables.</p>
+          <p className="auth-error">No sign-in method configured on the server. Set AUTH_PASSWORD or Google OAuth (GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET) in your deployment environment variables.</p>
         )}
       </div>
     </div>

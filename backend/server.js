@@ -1,11 +1,15 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __dirnameServer = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: join(__dirnameServer, '..', '.env') });
+
 import express from 'express';
 import cookieSession from 'cookie-session';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import { initDatabase, getDb } from './db/index.js';
 import { startJob, stopJob, pauseJob, resumeJob, restoreRunningJobs } from './services/scheduler.js';
 import { getRoutePolyline, reverseGeocode } from './services/googleMaps.js';
@@ -13,7 +17,7 @@ import { mkdirSync, existsSync } from 'fs';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname = __dirnameServer;
 const dataDir = join(__dirname, 'data');
 if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
 
@@ -30,6 +34,29 @@ const authEnabled = authPassword.length > 0 || googleClientId.length > 0 || true
 const sessionSecret = process.env.AUTH_SECRET || process.env.AUTH_PASSWORD || 'routewatch-session-secret';
 if (isProduction && authEnabled && sessionSecret === 'routewatch-session-secret') {
   console.warn('[Security] Set AUTH_SECRET or AUTH_PASSWORD in production. Using default session secret is unsafe.');
+}
+
+const TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+function signAuthToken(payload) {
+  const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const sig = crypto.createHmac('sha256', sessionSecret).update(payloadB64).digest('hex');
+  return `${payloadB64}.${sig}`;
+}
+function verifyAuthToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const dot = token.indexOf('.');
+  if (dot <= 0) return null;
+  const payloadB64 = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = crypto.createHmac('sha256', sessionSecret).update(payloadB64).digest('hex');
+  if (sig !== expected) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    if (payload.exp && Date.now() > payload.exp) return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 // Security headers
@@ -67,6 +94,20 @@ app.use(cookieSession({
   secure: isProduction,
   sameSite: cookieSameSite,
 }));
+
+// Optional: for mobile/native clients that send Authorization: Bearer <token>, attach session from token
+app.use((req, res, next) => {
+  if (req.session?.authenticated || req.session?.user) return next();
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
+  const token = authHeader.slice(7).trim();
+  const payload = verifyAuthToken(token);
+  if (payload?.email) {
+    req.session.authenticated = true;
+    req.session.user = { email: payload.email, name: payload.name ?? null, picture: null };
+  }
+  next();
+});
 
 // Startup log: confirm whether auth env vars are visible (check deploy logs if login page says "no sign-in method")
 console.log('[Auth] passwordAuth:', authPassword.length > 0 ? 'yes' : 'no', '| googleAuth:', googleClientId.length > 0 ? 'yes' : 'no');
@@ -180,9 +221,10 @@ app.post('/api/auth/login', async (req, res) => {
   const match = await bcrypt.compare(password, passwordHash);
   if (!match) return res.status(401).json({ error: 'Invalid email or password' });
   req.session.authenticated = true;
-  const sessionUser = { email: pick(userRow, 'email') ?? userRow.email, name: pick(userRow, 'name') ?? userRow.name ?? null, picture: null };
+  const sessionUser = { email: pick(userRow, 'email') ?? userRow.email, name: pick(userRow, 'name') ?? userRow.name ?? null, picture: null, hasPassword: true };
   req.session.user = normalizeUser(sessionUser);
-  res.json({ ok: true, authEnabled: true, user: req.session.user });
+  const token = signAuthToken({ email: req.session.user.email, name: req.session.user.name, exp: Date.now() + TOKEN_EXPIRY_MS });
+  res.json({ ok: true, authEnabled: true, user: req.session.user, token });
 });
 
 app.post('/api/auth/register', async (req, res) => {
@@ -199,8 +241,9 @@ app.post('/api/auth/register', async (req, res) => {
   const passwordHash = await bcrypt.hash(password, 10);
   await db.run('INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)', [id, email, name || null, passwordHash]);
   req.session.authenticated = true;
-  req.session.user = normalizeUser({ email, name: name || null, picture: null });
-  res.status(201).json({ ok: true, authEnabled: true, user: req.session.user });
+  req.session.user = normalizeUser({ email, name: name || null, picture: null, hasPassword: true });
+  const token = signAuthToken({ email: req.session.user.email, name: req.session.user.name, exp: Date.now() + TOKEN_EXPIRY_MS });
+  res.status(201).json({ ok: true, authEnabled: true, user: req.session.user, token });
 });
 
 app.post('/api/auth/change-password', async (req, res) => {
@@ -220,9 +263,9 @@ app.post('/api/auth/change-password', async (req, res) => {
   if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
   const newHash = await bcrypt.hash(newPassword, 10);
   await db.run('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, row.id]);
-  // Return updated user so frontend can keep hasPassword: true without refetch timing issues
   const updated = normalizeUser({ ...req.session.user, hasPassword: true });
-  res.json({ ok: true, user: updated });
+  const token = signAuthToken({ email: updated.email, name: updated.name, exp: Date.now() + TOKEN_EXPIRY_MS });
+  res.json({ ok: true, user: updated, token });
 });
 
 app.post('/api/auth/logout', (req, res) => {

@@ -49,7 +49,7 @@ function AppContent() {
   return (
     <>
       <Header view={view} onNavigate={goTo} />
-      <main className="main">
+      <main className="main main-with-mobile-nav">
         {view === 'dashboard' && (
           <Dashboard
             onSelectRoute={openRoute}

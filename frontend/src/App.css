@@ -2201,6 +2201,12 @@ body {
   min-height: 280px;
 }
 
+/* When zoomed out, chart canvas grows to fill more of the screen */
+.route-chart.route-chart-zoomed-out .job-chart-wrap {
+  height: min(500px, 50vh);
+  min-height: min(500px, 50vh);
+}
+
 .job-chart-scroll {
   overflow-x: auto;
   overflow-y: hidden;
@@ -2283,6 +2289,11 @@ body {
   display: flex;
 }
 
+.route-chart.route-chart-zoomed-out .job-chart-inner {
+  /* Overridden by inline style when zoomed out */
+  min-height: min(500px, 50vh);
+}
+
 /* ResponsiveContainer wrapper (first child) must fill so timeline extends full width */
 .job-chart-inner > div:first-child {
   flex: 1 1 0;
@@ -2306,6 +2317,11 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
+}
+
+.route-chart.route-chart-zoomed-out .job-chart-side-labels {
+  height: min(500px, 50vh);
+  min-height: min(500px, 50vh);
 }
 
 .job-chart-side-item {

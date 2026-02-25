@@ -681,19 +681,6 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
           <div className="route-chart-head">
             <h2 className="route-section-title">Travel time</h2>
             <div className="job-chart-controls">
-              <div className="job-chart-range">
-                <span className="job-chart-control-label">Range:</span>
-                {CHART_RANGES.map(r => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    className={`btn btn-sm ${chartRange === r.id && rangeViewportMatches(r) ? 'btn-primary' : 'btn-ghost'}`}
-                    onClick={() => setChartRangeAndViewport(r.id)}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
               <div className="job-chart-zoom" role="group" aria-label="Chart zoom">
                 <button
                   type="button"

@@ -20,12 +20,7 @@ import { formatJobMetaShort, getJobTitle, getJobSubtitle } from '../utils/format
 const API = '/api'
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
-const MIN_VIEWPORT_MS = 15 * 60 * 1000 // 15 min — zoom in as far as user wants (with a small floor to avoid div-by-zero)
-const CHART_RANGES = [
-  { id: '24h', label: '24 hours', ms: 24 * HOUR_MS, timeOnly: true },
-  { id: '7d', label: '7 days', ms: 7 * 24 * HOUR_MS, timeOnly: false },
-  { id: 'all', label: 'All', ms: null, timeOnly: false },
-]
+const MIN_VIEWPORT_MS = 1 * 60 * 1000 // 1 min — zoom in floor
 
 const CHART_MARGIN_RIGHT = 88
 
@@ -43,21 +38,18 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const [editing, setEditing] = useState(false)
   const [expandedSnapshotId, setExpandedSnapshotId] = useState(null)
   const [countdown, setCountdown] = useState(null)
-  const [chartRange, setChartRange] = useState('7d')
   const [chartViewportMs, setChartViewportMs] = useState(7 * DAY_MS)
+  const [chartEndTime, setChartEndTime] = useState(null)
   const [showAverageLine, setShowAverageLine] = useState(true)
   const [minMaxMode, setMinMaxMode] = useState('perDay') // 'off' | 'range' | 'perDay'
   const [showAllSnapshots, setShowAllSnapshots] = useState(false)
   const chartScrollRef = useRef(null)
-  const chartWrapRef = useRef(null)
-  const [chartContainerWidth, setChartContainerWidth] = useState(0)
-  const [chartWrapHeight, setChartWrapHeight] = useState(280)
   const [chartTooltip, setChartTooltip] = useState({ point: null, x: 0, y: 0 })
   const [chartTooltipPinned, setChartTooltipPinned] = useState(null)
   const [chartPopupSnapshot, setChartPopupSnapshot] = useState(null)
   const [snapshotDetailsCache, setSnapshotDetailsCache] = useState({}) // full snapshot (with route_details) by id – fetched on demand to reduce egress
   const chartHoverPointRef = useRef(null) // avoid setState when same point stays highlighted
-  const chartDragRef = useRef({ isDown: false, startX: 0, startScrollLeft: 0, didDrag: false })
+  const chartDragRef = useRef({ isDown: false, startX: 0, startEndTime: null, didDrag: false })
   const lastCollectedAtRef = useRef(null)
 
   useEffect(() => {
@@ -126,7 +118,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
       .then((full) => {
         if (!cancelled) setSnapshotDetailsCache((c) => ({ ...c, [snapshotIdToLoad]: full }))
       })
-      .catch(() => {})
+      .catch(() => { })
     return () => { cancelled = true }
   }, [jobId, snapshotIdToLoad])
 
@@ -225,31 +217,13 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   )
   const formatDurationMin = (v) => (v % 1 === 0 ? String(v) : v.toFixed(1))
 
-  const activeRange = CHART_RANGES.find(r => r.id === chartRange) || CHART_RANGES[0]
 
   const totalSpanMs =
     primarySnapshots.length >= 2
       ? Math.max(...primarySnapshots.map((s) => new Date(s.collected_at).getTime())) -
-        Math.min(...primarySnapshots.map((s) => new Date(s.collected_at).getTime()))
+      Math.min(...primarySnapshots.map((s) => new Date(s.collected_at).getTime()))
       : 7 * DAY_MS
 
-  const setChartRangeAndViewport = useCallback(
-    (rangeId) => {
-      setChartRange(rangeId)
-      const range = CHART_RANGES.find((r) => r.id === rangeId) || CHART_RANGES[0]
-      setChartViewportMs(range.ms != null ? range.ms : totalSpanMs)
-    },
-    [totalSpanMs]
-  )
-
-  const VIEWPORT_MATCH_TOLERANCE_MS = 2000
-  const rangeViewportMatches = useCallback(
-    (r) => {
-      const presetMs = r.ms != null ? r.ms : totalSpanMs
-      return Math.abs(chartViewportMs - presetMs) < VIEWPORT_MATCH_TOLERANCE_MS
-    },
-    [chartViewportMs, totalSpanMs]
-  )
 
   const chartState = useMemo(() => {
     const now = Date.now()
@@ -262,26 +236,29 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
     const scatter = data.filter(d => d.duration != null)
     const minTs = data.length > 0 ? data[0].ts : now
     const maxTs = data.length > 0 ? data[data.length - 1].ts : now
-    const totalSpan = maxTs - minTs
-    const baseViewport = totalSpan || 24 * HOUR_MS
+
     const viewportTimeMs = Math.max(MIN_VIEWPORT_MS, chartViewportMs)
+    const viewEnd = chartEndTime !== null ? chartEndTime : maxTs
+    const viewStart = viewEnd - viewportTimeMs
+
     let ticks = []
     if (data.length > 0) {
-      const maxTicks = 80
+      const maxTicks = 12
+      // Pick a tick step based on the viewport window (not the full data span)
       let step
-      if (chartRange === '7d') {
-        step = 6 * HOUR_MS
-      } else if (chartRange === '24h') {
-        step = HOUR_MS
-      } else {
-        step = 24 * HOUR_MS
-      }
-      let t = chartRange === '7d' ? (() => { const d = new Date(minTs); d.setHours(0, 0, 0, 0); return d.getTime() })() : Math.floor(minTs / step) * step
-      const rawCount = Math.ceil((maxTs - minTs) / step) + 1
-      if (rawCount > maxTicks) step = totalSpan / maxTicks
-      while (t <= maxTs + 1) {
-        ticks.push(t)
-        t += step
+      if (viewportTimeMs <= 2 * HOUR_MS) step = 15 * 60 * 1000       // 15 min ticks
+      else if (viewportTimeMs <= 12 * HOUR_MS) step = HOUR_MS         // 1h ticks
+      else if (viewportTimeMs <= 4 * DAY_MS) step = 6 * HOUR_MS       // 6h ticks
+      else step = DAY_MS                                               // 1d ticks
+      // Align to clean boundaries
+      let t = Math.floor(viewStart / step) * step
+      while (t <= viewEnd + 1) { ticks.push(t); t += step }
+      // If too many ticks, double the step until manageable
+      while (ticks.length > maxTicks) {
+        step *= 2
+        ticks = []
+        t = Math.floor(viewStart / step) * step
+        while (t <= viewEnd + 1) { ticks.push(t); t += step }
       }
     }
     const durations = data.map(d => d.duration).filter(v => v != null)
@@ -302,6 +279,8 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
       chartMinTs: minTs,
       chartMaxTs: maxTs,
       viewportTimeMs,
+      viewStart,
+      viewEnd,
       xAxisTicks: ticks,
       averageDuration: avg,
       minDurationInRange: minD,
@@ -310,7 +289,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
       maxPoints,
       chartYDomain,
     }
-  }, [primarySnapshots, chartRange, chartViewportMs])
+  }, [primarySnapshots, chartViewportMs, chartEndTime])
 
   const {
     chartData,
@@ -318,6 +297,8 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
     chartMinTs,
     chartMaxTs,
     viewportTimeMs,
+    viewStart,
+    viewEnd,
     xAxisTicks,
     averageDuration,
     minDurationInRange,
@@ -354,37 +335,52 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
   const displayMaxPoints = minMaxMode === 'range' ? maxPoints : minMaxMode === 'perDay' ? perDayMinMaxPoints.maxPoints : []
 
   const formatXTick = useCallback(
-    (ts) =>
-      activeRange.timeOnly
-        ? new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-        : formatTime(new Date(ts).toISOString()),
-    [activeRange.timeOnly, formatTime]
+    (ts) => formatTime(new Date(ts).toISOString()),
+    [formatTime]
   )
   const handleChartZoomIn = useCallback(() => {
-    setChartViewportMs((prev) => Math.max(MIN_VIEWPORT_MS, prev / 1.25))
-  }, [])
+    setChartViewportMs((prev) => {
+      const newViewport = Math.max(MIN_VIEWPORT_MS, prev / 1.25)
+      if (chartEndTime !== null) {
+        setChartEndTime((e) => e - prev / 2 + newViewport / 2)
+      }
+      return newViewport
+    })
+  }, [chartEndTime])
 
   const handleChartZoomOut = useCallback(() => {
-    setChartViewportMs((prev) => prev * 1.25)
-  }, [])
+    setChartViewportMs((prev) => {
+      const newViewport = prev * 1.25
+      if (chartEndTime !== null) {
+        setChartEndTime((e) => e - prev / 2 + newViewport / 2)
+      }
+      return newViewport
+    })
+  }, [chartEndTime])
 
   const formatXAxisTick = useCallback(
-    (ts) =>
-      chartRange === 'all' ? '' : new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric' }),
-    [chartRange]
+    (ts) => {
+      const span = viewEnd - viewStart
+      if (span <= 2 * HOUR_MS)
+        return new Date(ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+      if (span <= 4 * DAY_MS)
+        return new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric' })
+      return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    },
+    [viewStart, viewEnd]
   )
 
   const dayBands = useMemo(() => {
     const bands = []
-    const d = new Date(chartMinTs)
+    const d = new Date(viewStart)
     d.setHours(0, 0, 0, 0)
     let dayStart = d.getTime()
-    if (dayStart > chartMinTs) dayStart -= DAY_MS
+    if (dayStart > viewStart) dayStart -= DAY_MS
     let i = 0
-    while (dayStart < chartMaxTs) {
+    while (dayStart < viewEnd) {
       const dayEnd = dayStart + DAY_MS
-      const x1 = Math.max(dayStart, chartMinTs)
-      const x2 = Math.min(dayEnd, chartMaxTs)
+      const x1 = Math.max(dayStart, viewStart)
+      const x2 = Math.min(dayEnd, viewEnd)
       if (x2 > x1) {
         bands.push({
           x1,
@@ -396,76 +392,45 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
       i += 1
     }
     return bands
-  }, [chartMinTs, chartMaxTs])
+  }, [viewStart, viewEnd])
 
-  const totalTimeMs = chartMaxTs - chartMinTs
-  const chartInnerWidth = useMemo(() => {
-    if (chartContainerWidth <= 0 || totalTimeMs <= 0 || viewportTimeMs <= 0) return null
-    return Math.max(chartContainerWidth, Math.ceil((chartContainerWidth * totalTimeMs) / viewportTimeMs))
-  }, [chartContainerWidth, totalTimeMs, viewportTimeMs])
 
-  useEffect(() => {
-    const el = chartScrollRef.current
-    if (!el) return
-    const ro = new ResizeObserver(() => {
-      if (el) setChartContainerWidth(el.clientWidth)
-    })
-    ro.observe(el)
-    setChartContainerWidth(el.clientWidth)
-    return () => ro.disconnect()
-  }, [chartData.length])
-
-  const chartZoomedOut = chartViewportMs >= totalSpanMs
-  useEffect(() => {
-    const wrap = chartWrapRef.current
-    if (!wrap) return
-    const ro = new ResizeObserver(() => {
-      if (wrap) setChartWrapHeight(wrap.clientHeight)
-    })
-    ro.observe(wrap)
-    setChartWrapHeight(wrap.clientHeight)
-    return () => ro.disconnect()
-  }, [chartData.length, chartZoomedOut])
-
-  const chartDisplayHeight = chartZoomedOut ? chartWrapHeight : 280
-
-  useEffect(() => {
-    const el = chartScrollRef.current
-    if (!el) return
-    const scrollToRight = () => {
-      el.scrollLeft = el.scrollWidth - el.clientWidth
-    }
-    scrollToRight()
-    const raf1 = requestAnimationFrame(() => {
-      scrollToRight()
-      requestAnimationFrame(scrollToRight)
-    })
-    const timeout = setTimeout(scrollToRight, 80)
-    return () => {
-      cancelAnimationFrame(raf1)
-      clearTimeout(timeout)
-    }
-  }, [job?.id, snapshots.length, chartRange, chartInnerWidth])
-
+  const CHART_HEIGHT = 280
   const SCROLLBAR_HIT_PX = 12
   const CHART_PLOT_TOP = 4
   const CHART_PLOT_BOTTOM = 4
   const CHART_PLOT_LEFT = 28 // YAxis width - plot area starts after this
-  const CHART_PLOT_HEIGHT = chartDisplayHeight - CHART_PLOT_TOP - CHART_PLOT_BOTTOM
+  const CHART_PLOT_HEIGHT = CHART_HEIGHT - CHART_PLOT_TOP - CHART_PLOT_BOTTOM
   const HOVER_ON_POINT_RADIUS_PX = 8 // only highlight when cursor is right on the dot (small radius)
+
 
   const handleChartMouseMove = useCallback(
     (e) => {
       const el = chartScrollRef.current
       if (!el) return
       const ref = chartDragRef.current
+      const rect = el.getBoundingClientRect()
+      const plotWidth = rect.width - CHART_MARGIN_RIGHT - CHART_PLOT_LEFT
+
       if (ref.isDown) {
-        el.scrollLeft = ref.startScrollLeft + (ref.startX - e.clientX)
-        ref.didDrag = true
+        const deltaX = e.clientX - ref.startX
+        if (Math.abs(deltaX) > 3) ref.didDrag = true
+        if (plotWidth > 0 && ref.startEndTime !== null) {
+          const timeDelta = (deltaX / plotWidth) * viewportTimeMs
+          const newEndTime = ref.startEndTime - timeDelta
+
+          const minAllowedEndTime = chartMinTs + viewportTimeMs * 0.1
+          const clampedEndTime = Math.max(Math.min(minAllowedEndTime, chartMaxTs), Math.min(chartMaxTs, newEndTime))
+
+          if (clampedEndTime >= chartMaxTs) {
+            setChartEndTime(null)
+          } else {
+            setChartEndTime(clampedEndTime)
+          }
+        }
         return
       }
       if (!scatterData.length) return
-      const rect = el.getBoundingClientRect()
       if (e.clientY >= rect.bottom - SCROLLBAR_HIT_PX) {
         if (chartHoverPointRef.current !== null) {
           chartHoverPointRef.current = null
@@ -473,21 +438,22 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
         }
         return
       }
-      const plotWidth = el.scrollWidth - CHART_MARGIN_RIGHT - CHART_PLOT_LEFT
       if (plotWidth <= 0) return
-      const timeRange = chartMaxTs - chartMinTs
+      const timeRange = viewEnd - viewStart
       const [yMin, yMax] = chartYDomain
       const durationRange = yMax - yMin
-      const cursorX = el.scrollLeft + (e.clientX - rect.left)
+      const cursorX = e.clientX - rect.left
       const cursorY = e.clientY - rect.top
       const maxDistSq = HOVER_ON_POINT_RADIUS_PX * HOVER_ON_POINT_RADIUS_PX
       let best = null
       let bestDistSq = maxDistSq + 1
       for (let i = 0; i < scatterData.length; i++) {
         const d = scatterData[i]
+        // skip points outside the visible window
+        if (d.ts < viewStart || d.ts > viewEnd) continue
         const pointX =
           CHART_PLOT_LEFT +
-          (timeRange > 0 ? ((d.ts - chartMinTs) / timeRange) * plotWidth : 0)
+          (timeRange > 0 ? ((d.ts - viewStart) / timeRange) * plotWidth : 0)
         const pointY =
           CHART_PLOT_TOP +
           (durationRange > 0 ? (1 - (d.duration - yMin) / durationRange) * CHART_PLOT_HEIGHT : 0)
@@ -505,7 +471,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
           : { point: null, x: 0, y: 0 }
       )
     },
-    [scatterData, chartMinTs, chartMaxTs, chartYDomain]
+    [scatterData, viewStart, viewEnd, chartYDomain, viewportTimeMs, chartMaxTs, chartMinTs]
   )
 
   const handleChartMouseLeave = useCallback(() => {
@@ -522,14 +488,62 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
     chartDragRef.current = {
       isDown: true,
       startX: e.clientX,
-      startScrollLeft: el.scrollLeft,
+      startEndTime: viewEnd,
       didDrag: false,
     }
-  }, [])
+  }, [viewEnd])
 
   const handleChartMouseUp = useCallback(() => {
     chartDragRef.current.isDown = false
   }, [])
+
+  useEffect(() => {
+    const el = chartScrollRef.current
+    if (!el) return
+
+    const handleWheel = (e) => {
+      e.preventDefault()
+
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom
+        const zoomFactor = Math.exp(e.deltaY * 0.002)
+        setChartViewportMs((prev) => {
+          const newViewport = Math.max(MIN_VIEWPORT_MS, prev * zoomFactor)
+          setChartEndTime((currentEndTime) => {
+            const end = currentEndTime !== null ? currentEndTime : chartMaxTs
+            const newEnd = (end - prev / 2) + newViewport / 2
+            return newEnd >= chartMaxTs ? null : newEnd
+          })
+          return newViewport
+        })
+      } else {
+        // Pan
+        const rect = el.getBoundingClientRect()
+        const plotWidth = rect.width - CHART_MARGIN_RIGHT - CHART_PLOT_LEFT
+        if (plotWidth <= 0) return
+
+        let scrollAmt = e.deltaX
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          scrollAmt = e.deltaY
+        }
+
+        const timeDelta = (scrollAmt / plotWidth) * viewportTimeMs
+        setChartEndTime((currentEndTime) => {
+          const end = currentEndTime !== null ? currentEndTime : chartMaxTs
+          const newEndTime = end + timeDelta
+
+          const minAllowedEndTime = chartMinTs + viewportTimeMs * 0.1
+          const clampedEndTime = Math.max(Math.min(minAllowedEndTime, chartMaxTs), Math.min(chartMaxTs, newEndTime))
+
+          if (clampedEndTime >= chartMaxTs) return null
+          return clampedEndTime
+        })
+      }
+    }
+
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
+  }, [viewportTimeMs, chartMaxTs, chartMinTs])
 
   const handleChartClick = useCallback(() => {
     if (chartDragRef.current.didDrag) {
@@ -677,7 +691,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
 
       {/* Chart */}
       {primarySnapshots.length > 0 && (
-        <section className={`route-chart${chartViewportMs >= totalSpanMs ? ' route-chart-zoomed-out' : ''}`}>
+        <section className="route-chart">
           <div className="route-chart-head">
             <h2 className="route-section-title">Travel time</h2>
             <div className="job-chart-controls">
@@ -743,7 +757,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
           </div>
           {chartData.length > 0 ? (
             <div className="job-chart-with-side">
-              <div ref={chartWrapRef} className="job-chart-wrap">
+              <div className="job-chart-wrap">
                 <div
                   ref={chartScrollRef}
                   className={`job-chart-scroll${(chartTooltip.point || chartTooltipPinned?.point) ? ' job-chart-scroll-clickable' : ''}`}
@@ -755,13 +769,13 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                 >
                   <div
                     className="job-chart-inner"
-                    style={{ width: chartInnerWidth ?? '100%', minWidth: '100%', height: chartDisplayHeight, minHeight: chartDisplayHeight }}
+                    style={{ width: '100%', height: CHART_HEIGHT }}
                   >
-                    <ResponsiveContainer width={chartInnerWidth ?? '100%'} height={chartDisplayHeight}>
+                    <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
                       <ScatterChart
                         data={scatterData}
                         margin={{ top: 4, right: CHART_MARGIN_RIGHT, left: 0, bottom: 4 }}
-                        key={chartRange}
+                        key={chartViewportMs}
                         isAnimationActive={false}
                       >
                         {dayBands.map((band, i) => (
@@ -771,7 +785,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                         <XAxis
                           type="number"
                           dataKey="ts"
-                          domain={[chartMinTs, chartMaxTs]}
+                          domain={[viewStart, viewEnd]}
                           ticks={xAxisTicks}
                           interval={0}
                           tickFormatter={formatXAxisTick}
@@ -903,7 +917,7 @@ export default function JobDetail({ jobId, onBack, onFlipRoute, onDeleted }) {
                 </div>
               )}
               {(minDurationInRange != null || maxDurationInRange != null || averageDuration != null || displayMinPoints.length > 0 || displayMaxPoints.length > 0) && (
-                <div className="job-chart-side-labels" style={{ height: chartDisplayHeight, minHeight: chartDisplayHeight }}>
+                <div className="job-chart-side-labels" style={{ height: CHART_HEIGHT, minHeight: CHART_HEIGHT }}>
                   {averageDuration != null && (
                     <div className="job-chart-side-item job-chart-side-avg">
                       <span className="job-chart-side-label">Avg (all)</span>
